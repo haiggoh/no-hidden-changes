@@ -1,4 +1,4 @@
-# `no-hidden-state` — Design Spec
+# `no-hidden-changes` — Design Spec
 
 **Date:** 2026-07-03
 **Author:** Heiko Brantsch (`haiggoh`)
@@ -44,12 +44,12 @@ Findings from Claude Code / Desktop documentation research (2026-07-03):
 Single Git repository, published as a single-plugin Claude Code marketplace, matching the author's existing `claude-code-desktop-sync` conventions (MIT, `${CLAUDE_PLUGIN_ROOT}`, single-plugin `marketplace.json` named `haiggoh`).
 
 ```
-no-hidden-state/
+no-hidden-changes/
 ├── .claude-plugin/
 │   ├── plugin.json              # manifest: name, version, author, license
 │   └── marketplace.json         # single-plugin marketplace "haiggoh", source ./
 ├── skills/
-│   └── no-hidden-state/
+│   └── no-hidden-changes/
 │       └── SKILL.md             # frontmatter description + full guidance body
 ├── hooks/
 │   └── hooks.json               # SessionStart → emit one-line nudge as additionalContext
@@ -76,7 +76,7 @@ no-hidden-state/
 ### 4.1 `SKILL.md`
 
 Frontmatter:
-- `name: no-hidden-state`
+- `name: no-hidden-changes`
 - `description:` trimmed to ~70–90 words (best-practice length; the nudge hook shares the triggering load). Keeps: the decision-moment trigger, the verb list (disable/hide/park/move/rename/relocate state; side-channel over native toggle), the "will a future user see accurate native state?" check, and the benign carve-out (typos, tests, cosmetic refactors, renames, honest deletions).
 
 Body sections (guidance loaded only on invocation):
@@ -92,7 +92,7 @@ Body sections (guidance loaded only on invocation):
 
 - `SessionStart` matcher `startup` (and `resume`/`clear` as appropriate), one hook of `type: command`.
 - Command echoes a single-line nudge to stdout (portable `echo`/`printf`, no interpreter dependency), which Claude Code surfaces as `additionalContext`.
-- Nudge text (from the optimization run): instructs Claude to STOP and consult `no-hidden-state` before adopting any fix that disables/hides/parks/removes/relocates state or reaches for a custom side-channel over a native control; treat "the tool's own UI won't show it anymore" as a red flag.
+- Nudge text (from the optimization run): instructs Claude to STOP and consult `no-hidden-changes` before adopting any fix that disables/hides/parks/removes/relocates state or reaches for a custom side-channel over a native control; treat "the tool's own UI won't show it anymore" as a red flag.
 - **Manifest caveat** (learned on `claude-code-desktop-sync`): do NOT reference `hooks/hooks.json` from `plugin.json`'s `hooks` key — Claude Code auto-loads the conventional path, and double-referencing causes a "Duplicate hooks file" install error. `hooks/hooks.json` loads automatically from the plugin root.
 
 ### 4.3 `templates/custom-instructions.md`
@@ -101,14 +101,14 @@ Plain prose version of the rule (no skill/hook machinery) for pasting into Claud
 
 ### 4.4 Manifests
 
-- `plugin.json`: `name: no-hidden-state`, `version: 1.0.0`, `description`, `author` (Heiko Brantsch), `license: MIT`. No `hooks` key (see §4.2).
+- `plugin.json`: `name: no-hidden-changes`, `version: 1.0.0`, `description`, `author` (Heiko Brantsch), `license: MIT`. No `hooks` key (see §4.2).
 - `marketplace.json`: single-plugin marketplace named `haiggoh`, plugin source `./`.
 
 ---
 
 ## 5. Data / control flow
 
-**Code install:** user runs `/plugin marketplace add haiggoh/no-hidden-state` → `/plugin install no-hidden-state@haiggoh`. On next session: hook fires at SessionStart → one-line nudge enters context → when a task approaches a hide-state decision, Claude invokes the skill → reads full guidance → steers toward the native/visible option or flags the trade-off.
+**Code install:** user runs `/plugin marketplace add haiggoh/no-hidden-changes` → `/plugin install no-hidden-changes@haiggoh`. On next session: hook fires at SessionStart → one-line nudge enters context → when a task approaches a hide-state decision, Claude invokes the skill → reads full guidance → steers toward the native/visible option or flags the trade-off.
 
 **Desktop/web install:** user copies `templates/custom-instructions.md` into Custom Instructions → rule is present in every conversation as standing instruction.
 
@@ -141,6 +141,6 @@ The rule crystallized from an MCP cost-management episode: to cut per-turn token
 
 ## 9. Build phases
 
-1. **Local build (this session):** create all files under `~/ClaudeWorkspace/no-hidden-state/`, `git init`, validate JSON manifests, first commit.
-2. **Publish (after session restart, when the GitHub MCP loads):** create the public repo `haiggoh/no-hidden-state`, push via MCP `push_files` (token cannot be materialized for plain `git push`, per prior experience), verify anonymously with `git fetch` + `git diff`.
+1. **Local build (this session):** create all files under `~/ClaudeWorkspace/no-hidden-changes/`, `git init`, validate JSON manifests, first commit.
+2. **Publish (after session restart, when the GitHub MCP loads):** create the public repo `haiggoh/no-hidden-changes`, push via MCP `push_files` (token cannot be materialized for plain `git push`, per prior experience), verify anonymously with `git fetch` + `git diff`.
 3. **Version discipline:** bump `plugin.json` `version` on any functional change (patch for fixes, minor for features).
