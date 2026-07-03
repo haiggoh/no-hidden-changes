@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '%s' 'no-hidden-changes: before any change that disables, hides, parks, removes, or relocates state or config — or that reaches for a custom side-channel instead of a native toggle or menu — STOP and consult the no-hidden-changes skill first. Treat a tool no longer showing something in its own UI as a red flag, not a detail.'"
+          }
+        ]
+      }
+    ]
+  }
+}
