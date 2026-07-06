@@ -1,6 +1,6 @@
 ---
 name: no-hidden-changes
-description: Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool's built-in toggle, menu, or setting. The test: will a future user opening the tool's own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don't trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.
+description: Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool's built-in toggle, menu, or setting. Also applies when a change keeps hiding state that has since become valid (stale state lies too), or ships an in-place edit to a versioned/published artifact (plugin, package, shared config) without bumping its version. The test: will a future user opening the tool's own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don't trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.
 ---
 
 # No Hidden Changes
@@ -17,12 +17,28 @@ Stop and apply this skill the moment a solution involves any of these:
 - A custom side-channel: a `_disabled` / `_backup` / `_old` bucket, a shadow file, or a flag the native UI never reads.
 - Suppressing, blanking, or fake-emptying a native view so it shows less than the truth.
 - Choosing a bespoke hack over a documented native mechanism (per-item enable/disable, standard settings, a menu, a feature flag).
+- Continuing to hide or filter something after the reason for hiding it has expired, so the native view now understates what is actually available.
+- Shipping an in-place change to a versioned/published artifact (plugin, package, shared config) without bumping its version.
 
 ## The one check
 
 > Will a future user or session, opening the tool's OWN native UI, see accurate, non-broken, self-explanatory state?
 
 If the honest answer is "no — it'll look empty, absent, or wrong," the solution is hiding state. Change course or flag it loudly.
+
+## The rule is symmetric: stale state lies too
+
+Hiding is not only an act of *removal* — it is also *failing to restore*. If a change hid or filtered something for a documented reason ("hide the models the gateway can't serve"), and reality later changes so that reason no longer holds, then continuing to hide it makes the native view lie in the other direction: it now understates what is actually available.
+
+Restoring the item **in the spirit of the change's original, documented intent, and telling the user you did it**, is therefore not a hidden change — it is the honest correction. Reflecting real, current state outranks re-asking permission to apply logic the user already approved. Automatic restoration is safe when it is:
+
+- **additive-only and idempotent** — it re-adds, never removes, and does nothing once the item is back;
+- **faithful to the documented intent** of the original change; and
+- **announced** — the user is told what changed and why.
+
+## Publishing a change: bump the version
+
+Shipping an in-place edit to a versioned or published artifact — a plugin, package, or shared config others install — without bumping its version is itself a hidden change: consumers get different behavior under the same version string, and nothing signals that anything moved. Treat the version number as the discoverable record of the change: bump `plugin.json` (or the equivalent manifest) on every published change, so the swap is visible and attributable rather than silent.
 
 ## Prefer native mechanisms
 

@@ -32,6 +32,12 @@ You get:
 - a one-line **SessionStart hook** that reminds Claude the skill exists so it
   fires at the right moment.
 
+The rule also covers two symmetric cases: **stale state** — continuing to hide
+something after it becomes valid is its own hidden change, so restore it (in the
+spirit of the original intent) and say so — and **version bumps** — shipping an
+in-place change to a published/versioned artifact without bumping its version is a
+silent swap, so bump `plugin.json` to keep the change visible and attributable.
+
 ## Install — Claude Desktop / claude.ai (copy-paste)
 
 These apps have no plugin marketplace. Open

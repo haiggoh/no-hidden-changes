@@ -15,6 +15,10 @@ opening the tool's OWN native UI see accurate, non-deceptive state, or will it l
 empty, absent, or broken? If the latter, prefer the native, visible path; if hidden
 state is truly unavoidable, flag it loudly and make it self-explanatory in place.
 Do not apply this to benign edits — typos, tests, cosmetic refactors, renames, or
-honest deletions where nothing is being hidden.
+honest deletions where nothing is being hidden. The rule is symmetric: continuing to
+hide something after it has become valid also lies — restoring it in the spirit of the
+original intent, and telling the user, is the honest fix (additive-only, idempotent,
+announced). Likewise, when you ship an in-place change to a versioned or published
+artifact, bump its version so the change is visible rather than a silent swap.
 
 ---
