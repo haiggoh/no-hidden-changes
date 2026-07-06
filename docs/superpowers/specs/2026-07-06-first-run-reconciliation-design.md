@@ -36,16 +36,37 @@ proactive pass fire the right number of times.
 
 When reconciling, Claude reviews the user's standing guidance — global auto-memory
 (`MEMORY.md` + memory dir), `CLAUDE.md` / `AGENTS.md`, and custom instructions in scope —
-for the three relationships to this rule, and in **every** case *surfaces and proposes*,
-never silently changes anything:
+for the three relationships to this rule. In **every** case Claude *surfaces the conflict
+in-session first, and changes things only after the user chooses* — never silently:
 
-- **Contradiction** → name the conflicting instruction and explain the clash. Precedence:
-  an explicit user instruction still wins (user instructions override skills), BUT the
-  conflict must be surfaced, never silently resolved. If the old note is an anti-pattern
-  the user now wants to drop, offer to update it (only with the user's say-so).
+- **Contradiction** → name the conflicting instruction and explain the clash.
+  **Precedence: installing this plugin is treated as opting into its paradigm, so the
+  paradigm takes precedence over _older_ instructions that contradict it** — those may be
+  an approach the user now regrets. Claude therefore *nudges the user to accept a
+  transparent, automatic overhaul* of the conflicting instruction so it matches the new
+  paradigm. This is a recommendation resolved in-session, not a silent override: Claude
+  shows the exact change and the user actively confirms (and may decline / keep the old
+  instruction).
 - **Duplication** → point out the near-identical existing rule; propose consolidating to
   one canonical source so they don't diverge. User picks which is authoritative.
 - **Overlap / precedence** → state how reconciliation will work and confirm.
+
+### Persistence & transparent overhaul
+
+Reconciliation is resolved interactively in-session (so the user can choose when their
+preference isn't obvious up front), and the chosen resolution is then **persisted** so the
+same conflict doesn't resurface:
+
+- **Personal auto-memory / custom instructions** → after the user confirms, Claude edits
+  the note directly: update or remove the contradicting instruction, or consolidate
+  duplicates into one canonical source.
+- **Shared / committed files** (a project `CLAUDE.md`/`AGENTS.md` under git) → Claude
+  proposes the exact diff and lets the user apply/commit it themselves. It never
+  auto-commits team-shared config.
+- Every change is **shown before it is applied and recorded** (a brief reconciliation note
+  in memory), so the overhaul is discoverable later — an overhaul in the open, not a silent
+  rewrite. Same reasoning as the v1.1.0 corollary: a change made in the spirit of a
+  paradigm the user opted into, confirmed and announced, is not a hidden change.
 
 ### When the proactive pass fires (two markers, both under `~/.claude/`)
 
@@ -90,8 +111,12 @@ that moment and surfaces it. This is what the copy-paste template relies on (see
 
 ## Non-goals / safety
 
-- **Never auto-edits** the user's memories, `CLAUDE.md`, or custom instructions — only
-  surfaces and proposes. Auto-editing their notes would itself be a hidden change.
+- **Edits only after in-session confirmation, always transparently.** Claude shows the
+  exact before/after and records the change; it never silently rewrites anything. A
+  confirmed, shown, recorded overhaul is not a hidden change — it is the paradigm the user
+  opted into, applied in the open.
+- **Shared/committed files are proposed, never auto-committed.** For a project `CLAUDE.md`
+  under git, Claude offers the diff; the user applies and commits it.
 - **No code-level parsing** of memory formats; Claude does the reading.
 - Markers live under `~/.claude/`, never in the user's repos.
 
