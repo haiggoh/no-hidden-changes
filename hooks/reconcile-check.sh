@@ -1,41 +1,72 @@
 #!/usr/bin/env bash
 # no-hidden-changes — SessionStart hook.
 #
-# Always prints the standing nudge. Additionally, once globally and once per
-# project, it OFFERS a reconciliation of the plugin's rule with the user's
-# pre-existing on-disk guidance. It only DETECTS + OFFERS — it never writes the
-# marker itself. Claude writes the marker (see the skill) only AFTER the pass is
-# completed or dismissed, so an un-acted pass simply re-offers next session and
-# cannot be silently "burned" or lost.
+# Emits ONE JSON object on stdout, using the two disjoint hook channels:
+#   - hookSpecificOutput.additionalContext : MODEL-only. Always the standing
+#     nudge; on a first run it also carries the triage-first reconciliation
+#     prompt.
+#   - systemMessage (first run only) : USER-visible banner confirming the plugin
+#     is active and pre-announcing the one-time reconciliation.
 #
-# stdout from a SessionStart hook is injected into Claude's context.
+# It only DETECTS + OFFERS — it never writes the marker. Claude writes the marker
+# (see the skill) only AFTER the pass completes or is dismissed, so an un-acted
+# pass simply re-offers next session and cannot be silently lost.
+#
+# Pure bash (3.2-compatible); no jq/python dependency at runtime.
 
 set -uo pipefail
 
 RECON_VERSION='1.2.0'
 DIR="$HOME/.claude/.no-hidden-changes"
 GLOBAL="$DIR/global-reconciled"
-# Per-project marker keyed by a collision-resistant hash of $PWD (cksum is POSIX,
-# always present) — avoids the path collisions of naive character substitution.
 PROJ_KEY="$(printf '%s' "${PWD:-unknown}" | cksum | tr -d ' ')"
 PROJ="$DIR/proj_${PROJ_KEY}"
 
-NUDGE="no-hidden-changes: before any change that disables, hides, parks, removes, or relocates state or config — or reaches for a custom side-channel instead of a native toggle or menu — STOP and consult the no-hidden-changes skill first. Treat a tool no longer showing something in its own UI (or continuing to hide something that has become valid) as a red flag, not a detail."
+# --- pure-bash JSON string escaper (bash 3.2 verified) ---
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}    # backslash -> \\  (MUST run first)
+  s=${s//\"/\\\"}    # "         -> \"
+  s=${s//$'\n'/\\n}  # newline   -> \n
+  s=${s//$'\t'/\\t}  # tab       -> \t
+  s=${s//$'\r'/\\r}  # CR        -> \r
+  printf '%s' "$s"
+}
 
-# A marker "counts" only if it exists AND its stamp matches the current version,
-# so a future reconciliation version re-runs instead of being silently skipped.
+# A marker "counts" only if it exists AND its stamp matches the current version.
 stamped_current() {
   [ -f "$1" ] || return 1
   [ "$(cat "$1" 2>/dev/null)" = "$RECON_VERSION" ]
 }
 
-COMMON="Follow the skill's \"Reconcile with the user's existing guidance\" section. Sources you CAN read here: global auto-memory (~/.claude MEMORY.md + memory dir) and CLAUDE.md/AGENTS.md. You CANNOT read the user's claude.ai/Desktop custom instructions — say so plainly, do not claim to have covered them. Surface conflicts NEUTRALLY (present the existing instruction and the plugin rule as both possibly-intentional; no 'old is wrong/regretted' framing), quote existing text verbatim, and DEFAULT TO KEEPING it unless the user actively chooses to change it — never a blind 'apply all'. You may open with an inviting offer like: 'Want me to review your earlier instructions and suggest changes that make your setup more transparent?' and, on yes, show ALL proposed before/after diffs together for one informed approval. Edit personal auto-memory / uncommitted CLAUDE.md in place after confirmation (treat the MEMORY.md index entry and its linked note as one unit); for committed CLAUDE.md and for AGENTS.md (other tools read it) propose a diff to commit rather than editing in place. Record declines as durable notes and respect them."
+NUDGE="no-hidden-changes: before any change that disables, hides, parks, removes, or relocates state or config — or reaches for a custom side-channel instead of a native toggle or menu — STOP and consult the no-hidden-changes skill first. Treat a tool no longer showing something in its own UI (or continuing to hide something that has become valid) as a red flag, not a detail."
 
-# Always emit the standing nudge.
-printf '%s' "$NUDGE"
+# Shared triage-first reconciliation instructions (brevity-capped).
+COMMON="Follow the skill's \"Reconcile with the user's existing guidance\" section, TRIAGE-FIRST: silently compare the readable guidance (global MEMORY.md + memory dir, CLAUDE.md/AGENTS.md) to the rule BEFORE saying anything. If nothing conflicts or duplicates, write the marker(s) and reply with ONE short line led by 🟢 (e.g. '🟢 Checked your existing setup — zero conflicts, nothing to reconcile.'), then proceed to the user's actual request; do NOT explain the feature at length. If you DO find something, lead with one 🟡 line ('🟡 Found N item(s) worth reconciling — below.'), then surface concisely: quote existing text verbatim, frame NEUTRALLY (both possibly-intentional, no 'old is wrong' framing), DEFAULT TO KEEPING it, make ONE informed batch offer (never blind 'apply all'); only in this path add a short note that claude.ai/Desktop custom instructions could not be read. Persist per the skill: personal auto-memory / uncommitted CLAUDE.md edited in place after confirmation; committed CLAUDE.md and AGENTS.md offered as a diff; record declines as durable notes. Keep total output brief and non-lecturing."
 
+GLOBAL_PROMPT="[no-hidden-changes first-run reconciliation — non-blocking; do it around the user's request, don't derail an urgent task] First session since install (or a newer reconciliation version). Do a ONE-TIME triage over the global guidance AND this project. ${COMMON} ONLY after the pass completes or the user dismisses it, create dir \"${DIR}\" and write \"${RECON_VERSION}\" into BOTH \"${GLOBAL}\" and \"${PROJ}\". Do not create them beforehand."
+
+PROJ_PROMPT="[no-hidden-changes reconciliation for THIS project — non-blocking] First session for the plugin in this project. Triage this project's CLAUDE.md/AGENTS.md/local guidance against the rule. ${COMMON} ONLY after the pass completes or is dismissed, write \"${RECON_VERSION}\" into \"${PROJ}\" (create dir \"${DIR}\" first). Do not create it beforehand."
+
+GLOBAL_BANNER="👋 no-hidden-changes active — on your first message I'll do a one-time check of this rule against your existing setup and flag anything that conflicts. Nothing changes without your OK."
+PROJ_BANNER="👋 no-hidden-changes: new project — on your first message I'll check this rule against this project's guidance. Nothing changes without your OK."
+
+# Decide which (if any) first-run branch applies.
+context="$NUDGE"
+banner=""
 if ! stamped_current "$GLOBAL"; then
-  printf '\n\n[no-hidden-changes FIRST-RUN reconciliation — non-blocking; do it before or around the user request, do not derail an urgent task] First session since the plugin was installed (or a newer reconciliation version shipped). Run a ONE-TIME pass over the global standing guidance AND this project. %s ONLY after the pass is completed or the user dismisses it, persist it so it does not repeat: create the dir "%s" and write "%s" into BOTH "%s" and "%s". Do not create them beforehand.' "$COMMON" "$DIR" "$RECON_VERSION" "$GLOBAL" "$PROJ"
+  context="${NUDGE}"$'\n\n'"${GLOBAL_PROMPT}"
+  banner="$GLOBAL_BANNER"
 elif ! stamped_current "$PROJ"; then
-  printf '\n\n[no-hidden-changes reconciliation for THIS project — non-blocking] First session for the plugin in this project. Reconcile this project'\''s CLAUDE.md/AGENTS.md/local guidance with the rule. %s ONLY after the pass is completed or dismissed, write "%s" into "%s" (create dir "%s" first). Do not create it beforehand.' "$COMMON" "$RECON_VERSION" "$PROJ" "$DIR"
+  context="${NUDGE}"$'\n\n'"${PROJ_PROMPT}"
+  banner="$PROJ_BANNER"
+fi
+
+# Emit one JSON object. systemMessage only when a banner is set.
+if [ -n "$banner" ]; then
+  printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
+    "$(json_escape "$banner")" "$(json_escape "$context")"
+else
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' \
+    "$(json_escape "$context")"
 fi
