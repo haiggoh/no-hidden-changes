@@ -1,7 +1,7 @@
 # Design: first-run self-reconciliation
 
-Date: 2026-07-06
-Status: approved (brainstorming) — pending implementation plan
+Date: 2026-07-06 (rev. 2 — incorporates the adversarial multi-agent review)
+Status: approved design; ready for implementation plan
 Target version: 1.2.0
 
 ## Context & motivation
@@ -9,129 +9,158 @@ Target version: 1.2.0
 The `no-hidden-changes` plugin ships a standing rule (prefer visible/honest/reversible
 changes; don't let a tool's UI misrepresent reality). Almost everyone installs it **on
 top of an existing Claude Code history** — accumulated auto-memories, `CLAUDE.md` /
-`AGENTS.md` files, and custom instructions. That pre-existing standing guidance can:
+`AGENTS.md`, custom instructions — which can **contradict**, **duplicate**, or **overlap**
+the rule. Dropping a new standing rule on top of possibly-conflicting old ones without
+surfacing the collision is *itself a hidden change*. So the fix is the plugin **applying
+its own principle to its own installation** — not a bolt-on scanner.
 
-1. **Contradict** the rule — e.g. an old note "park unused MCP servers in a
-   `mcpServers_disabled` key to save cost" is exactly this plugin's canonical
-   anti-pattern. Two live rules pull opposite ways, and the older one may win silently.
-2. **Duplicate** it — a user's own "prefer visible changes" note now coexists with the
-   plugin's; the two word-drift over time and neither is clearly canonical.
-3. **Overlap / need precedence** — related-but-not-identical guidance with no stated
-   rule for which wins.
-
-Dropping a new standing rule on top of possibly-conflicting old ones, without surfacing
-the collision, is **itself a hidden change**. So the fix is not a bolt-on scanner — it
-is the plugin **applying its own principle to its own installation**.
-
-## Principle (why this stays true to a tiny plugin)
+## Principle (stays true to a tiny plugin)
 
 The plugin never parses anything; it delegates judgment to Claude via a skill + a
-lightweight nudge. This feature does the same: **Claude** reads the existing guidance
-and reconciles. No memory-parser in code. The only machinery is a marker that makes the
-proactive pass fire the right number of times.
+lightweight nudge. This feature does the same: **Claude** reads the guidance and
+reconciles. The only machinery is a marker scheme that controls how often the pass runs.
 
-## Behavior
+## Lifecycle & activation (verified against Claude Code docs)
 
-### The judgment (shared by proactive + reactive paths)
+- **No install-time hook exists.** `Setup` fires only for `--init-only` / CI runs; hook
+  definitions cannot use `once` (skill-frontmatter only). Nothing runs at the instant of
+  `/plugin install`.
+- **Activation requires a new session.** Newly installed plugin hooks and the skill take
+  effect on the **next session start**, not the install session. No live reload.
+- **This is well-timed:** rule and reconciliation both come alive at that same next-session
+  boundary, and `SessionStart` fires the reconciliation at the very start — before any
+  task — so reconciliation precedes the rule's first real application. The only
+  unreconciled window is the install session, where the plugin isn't active anyway.
+- The README must tell users: **after installing, start a fresh session**; reconciliation
+  runs automatically then.
 
-When reconciling, Claude reviews the user's standing guidance — global auto-memory
-(`MEMORY.md` + memory dir), `CLAUDE.md` / `AGENTS.md`, and custom instructions in scope —
-for the three relationships to this rule. In **every** case Claude *surfaces the conflict
-in-session first, and changes things only after the user chooses* — never silently:
+## Trigger — SessionStart, no matcher, marker-written-on-completion
 
-- **Contradiction** → name the conflicting instruction and explain the clash.
-  **Precedence: installing this plugin is treated as opting into its paradigm, so the
-  paradigm takes precedence over _older_ instructions that contradict it** — those may be
-  an approach the user now regrets. Claude therefore *nudges the user to accept a
-  transparent, automatic overhaul* of the conflicting instruction so it matches the new
-  paradigm. This is a recommendation resolved in-session, not a silent override: Claude
-  shows the exact change and the user actively confirms (and may decline / keep the old
-  instruction).
-- **Duplication** → point out the near-identical existing rule; propose consolidating to
-  one canonical source so they don't diverge. User picks which is authoritative.
-- **Overlap / precedence** → state how reconciliation will work and confirm.
+- The `SessionStart` hook runs with **no `matcher`**, so it fires on all session-start
+  sources (startup, resume, clear, compact). The **marker — not the matcher — is the
+  once-guard**.
+- The hook only **detects and offers**: if the relevant marker is absent, it prints (via
+  stdout, which SessionStart injects into context) a brief, **non-preemptive** notice +
+  offer to reconcile. It does **not** write the marker.
+- **Claude writes the marker only after reconciliation completes or is explicitly
+  dismissed** (via the skill). Consequences: (a) an un-acted reconciliation **re-offers
+  every session until resolved/dismissed** — it can't be silently lost or "burned"; and
+  (b) it fixes the "recorded-but-not-performed" bug of writing the marker eagerly in the
+  shell.
+- **Non-preemptive:** the offer is handled before the user's task unless the user
+  redirects; it never blocks the stated task.
 
-### Persistence & transparent overhaul
+### Markers — two scopes, hashed, version-stamped (under `~/.claude/.no-hidden-changes/`)
 
-Reconciliation is resolved interactively in-session (so the user can choose when their
-preference isn't obvious up front), and the chosen resolution is then **persisted** so the
-same conflict doesn't resurface:
+- **Global** marker: the first-ever reconciliation covers global on-disk guidance + the
+  current project; on completion Claude writes both the global marker and this project's
+  marker.
+- **Per-project** marker: named from a **hash** of the canonical project root —
+  `proj_$(printf '%s' "$PWD" | cksum | tr -d ' ')` (`cksum` is POSIX / always present).
+  This avoids the collisions and long-filename problems of raw `tr '/ ' '__'` sanitization
+  (e.g. `/a/b c` vs `/a/b/c`). Prefer git-toplevel as the project root when available.
+- **Version-stamped:** the reconciliation-schema version is written into the marker. A
+  future version that ships a broader/better pass compares its version to the stamp and
+  runs an incremental pass + re-stamps — so improvements aren't silently skipped on
+  already-reconciled installs (which would be the plugin's own anti-pattern).
 
-- **Personal auto-memory / custom instructions** → after the user confirms, Claude edits
-  the note directly: update or remove the contradicting instruction, or consolidate
-  duplicates into one canonical source.
-- **Shared / committed files** (a project `CLAUDE.md`/`AGENTS.md` under git) → Claude
-  proposes the exact diff and lets the user apply/commit it themselves. It never
-  auto-commits team-shared config.
-- Every change is **shown before it is applied and recorded** (a brief reconciliation note
-  in memory), so the overhaul is discoverable later — an overhaul in the open, not a silent
-  rewrite. Same reasoning as the v1.1.0 corollary: a change made in the spirit of a
-  paradigm the user opted into, confirmed and announced, is not a hidden change.
+## Sources reconciled — Claude-Code-reachable only
 
-### When the proactive pass fires (two markers, both under `~/.claude/`)
+- **In scope (on disk, readable/editable by Claude Code):** global auto-memory
+  (`MEMORY.md` + memory dir) and `CLAUDE.md` / `AGENTS.md`.
+- **Out of scope for the Code-side pass:** the user's global **custom instructions** live
+  on Anthropic's servers (claude.ai/Desktop) and are invisible to Claude Code. The pass
+  must **not** claim to cover them — it tells the user this leg was not reconciled and must
+  be reviewed manually in Desktop. (Custom-instruction reconciliation guidance belongs in
+  the paste-in template, which is where Desktop users get it.)
 
-- **Global-first:** on the first-ever session after install (global marker absent), run a
-  FULL pass — global guidance + the current project's `CLAUDE.md`/local guidance — then
-  create BOTH the global marker and this project's marker (this project is now covered).
-- **Project-first:** in a project whose marker is absent (but global marker present), run
-  a PROJECT pass over that project's `CLAUDE.md`/local guidance; create the project marker.
-- **Otherwise:** only the normal standing nudge prints.
+## The judgment — neutral surfacing + informed consent
 
-This yields exactly one reconciliation globally, plus one per distinct project — never
-repeating.
+For each relationship, Claude **surfaces first and changes only after an informed,
+per-item choice** — never silently, never via a blind "apply all":
 
-### Reactive path (folded-in B)
+- **Contradiction** → name the conflicting instruction, quote its **verbatim** text, and
+  explain the clash **neutrally** — present both as possibly-intentional; **no
+  "old = regretted" framing**. Recommend the transparency-improving change, but the
+  **default on non-response is to keep the existing instruction unchanged**. The user
+  actively confirms each change.
+- **Duplication** → point out the near-identical rule; propose consolidating to one
+  canonical source. If the near-duplicate is the **plugin's own shipped text** (pasted
+  template, or a reinstall), bias toward keeping the **user's on-disk copy** (it survives
+  uninstall) rather than making the plugin canonical.
+- **Overlap / precedence** → state how reconciliation will work and confirm per item.
 
-The same judgment lives in `SKILL.md`, so even outside the one-time pass, whenever the
-rule is about to apply Claude also checks for a conflicting/duplicate user instruction at
-that moment and surfaces it. This is what the copy-paste template relies on (see below).
+### Convenient batch (opt-in, still transparent)
 
-## Components changed
+Reconciliation is offered with an inviting, low-pressure prompt — e.g. *"Want me to review
+your earlier instructions and suggest changes that make your setup more transparent?"* On
+yes, Claude presents **all** proposed changes together as a reviewable set of verbatim
+before/after diffs. The user may **approve the whole reviewed set** (convenient, but
+informed — they saw every diff), approve a subset, or decline. This is the sanctioned form
+of "apply all": batch *review-then-approve*, never batch *blind-apply*.
 
-1. **`skills/no-hidden-changes/SKILL.md`** — add a section, e.g. "Reconcile with the
-   user's existing guidance," carrying the judgment above (proactive-on-first-encounter +
-   reactive-when-applying). Add a one-line note to the frontmatter `description` so the
-   skill triggers when reconciliation is warranted.
+## Persistence
 
-2. **`hooks/hooks.json`** — the `SessionStart` command gains a marker-guarded branch.
-   Dependency-free shell (no new script, no network):
-   - Global marker: `~/.claude/.no-hidden-changes/global-reconciled`
-   - Project marker: `~/.claude/.no-hidden-changes/proj_<sanitized $PWD>` (sanitize by
-     `tr '/ ' '__'` — avoids depending on a hashing binary and never writes inside the repo)
-   - Always `printf` the standing nudge; prepend/append the appropriate reconciliation
-     instruction on global-first or project-first; `mkdir -p` the dir and create markers.
+- **Personal auto-memory / uncommitted `CLAUDE.md`** → after confirmation, Claude edits
+  directly. For the index+notes memory layout, treat the `MEMORY.md` index entry and its
+  linked note as **one unit** — update/remove both, show both in the diff, and register any
+  new reconciliation note in the index so it stays authoritative.
+- **Shared / committed files (committed `CLAUDE.md`, and always `AGENTS.md`)** → Claude
+  proposes the exact **diff** for the user to apply/commit; never auto-commits. For
+  `AGENTS.md`, the offer explicitly notes other tools (Cursor, Codex, Aider, …) consume it,
+  so the user understands the blast radius before confirming.
+- Memory edits are shown as **true line-level diffs** (not paraphrases), so structural
+  damage is visible at confirmation time.
+- **Declines are recorded** as first-class reconciliation notes ("user chose to keep X over
+  the plugin rule on <date>"). Both the proactive and reactive paths check for an existing
+  decision before re-surfacing a conflict — a decline is durable, not re-nagged.
 
-3. **`templates/custom-instructions.md`** — add the reconciliation guidance (reactive
-   form). Explicitly note the *one-time proactive trigger is Claude-Code-only*, because
-   Desktop/claude.ai have no hook system.
+## Reactive path (folded in)
 
-4. **`README.md`** — brief mention of first-run reconciliation.
-
-5. **`.claude-plugin/plugin.json`** — bump `1.1.0` → `1.2.0` (new feature).
+The same judgment lives in `SKILL.md`, so beyond the one-time pass, whenever the rule is
+about to apply Claude also checks for a conflicting/duplicate user instruction at that
+moment, respecting recorded decisions. This is what the copy-paste template relies on
+(Desktop/claude.ai have no hook, so they get the reactive form only).
 
 ## Non-goals / safety
 
-- **Edits only after in-session confirmation, always transparently.** Claude shows the
-  exact before/after and records the change; it never silently rewrites anything. A
-  confirmed, shown, recorded overhaul is not a hidden change — it is the paradigm the user
-  opted into, applied in the open.
-- **Shared/committed files are proposed, never auto-committed.** For a project `CLAUDE.md`
-  under git, Claude offers the diff; the user applies and commits it.
+- **No blind "apply all."** Every change is shown (verbatim before/after) and individually
+  consentable; default = keep existing.
+- **In-place edits confined to Claude-reachable, non-shared files.** Committed `CLAUDE.md`
+  and `AGENTS.md` (cross-tool) are proposed as diffs only.
 - **No code-level parsing** of memory formats; Claude does the reading.
+- **Never auto-commits** anything.
 - Markers live under `~/.claude/`, never in the user's repos.
 
 ## Edge cases
 
-- **Marker dir unwritable** → pass may re-fire; harmless (the instruction is safe to
-  repeat, and finds nothing new to surface).
-- **No existing guidance** → Claude reports "nothing to reconcile"; no noise.
-- **Hook must never break/delay startup** → pure `test`/`printf`/`: >`; no network.
+- Marker dir unwritable → pass re-offers next session (safe; nothing recorded).
+- No existing guidance → Claude reports "nothing to reconcile"; no noise.
+- Install session → reconciliation does not run there (hook inactive until next session);
+  README documents starting a fresh session.
+- Session abandoned mid-reconciliation → marker not written → re-offered next session; no
+  loss.
+- Hook stays a fast, dependency-light shell check (`cksum` only); no network.
+
+## Components changed
+
+1. `skills/no-hidden-changes/SKILL.md` — reconciliation section (judgment + neutral consent
+   + batch offer + persistence + decline records); frontmatter `description` clause.
+2. `hooks/hooks.json` — SessionStart, **matcher omitted**, marker-guarded detect+offer
+   (Claude writes the version-stamped, `cksum`-hashed markers on completion).
+3. `templates/custom-instructions.md` — reactive reconciliation guidance; note the
+   Code-only trigger and the custom-instructions / `AGENTS.md` caveats.
+4. `README.md` — brief feature mention + "start a fresh session after install" note.
+5. `.claude-plugin/plugin.json` — `1.1.0` → `1.2.0`.
 
 ## Testing
 
-- Remove markers, run the hook command with a fake `$PWD` → confirm it emits the
-  reconciliation instruction and creates the correct marker(s).
-- Run again (markers present) → confirm only the standing nudge prints.
-- Confirm a fresh project dir (new `$PWD`) triggers the project pass once.
-- The judgment itself is model behavior — verified by inspecting the injected instruction,
-  not unit tests.
+- Remove markers; simulate SessionStart with a given `$PWD` → the offer is injected and the
+  shell writes **no** marker.
+- Simulate Claude completing reconciliation → marker written + version-stamped; next
+  session prints only the standing nudge.
+- Distinct `$PWD`s (including paths with spaces/underscores) → distinct `cksum` markers, no
+  collision.
+- Decline → decline note recorded; not re-nagged.
+- Judgment is model behavior — verified by inspecting the injected instruction and the
+  diffs shown, not unit tests.
