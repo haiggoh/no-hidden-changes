@@ -38,6 +38,14 @@ spirit of the original intent) and say so — and **version bumps** — shipping
 in-place change to a published/versioned artifact without bumping its version is a
 silent swap, so bump `plugin.json` to keep the change visible and attributable.
 
+**First-run reconciliation (Claude Code):** the first session after you install — and once
+per new project — the plugin offers to reconcile this rule with your *existing* memories /
+`CLAUDE.md` / `AGENTS.md`, surfacing anything that contradicts or duplicates it. It only
+surfaces and proposes (per-item, verbatim, default: keep); nothing is rewritten without your
+confirmation, and files other tools read (e.g. `AGENTS.md`) are offered as diffs. Note that
+plugin hooks activate on the **next** session, so **start a fresh session after installing**
+for the pass to run.
+
 ## Install — Claude Desktop / claude.ai (copy-paste)
 
 These apps have no plugin marketplace. Open

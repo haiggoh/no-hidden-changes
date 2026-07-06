@@ -19,6 +19,15 @@ honest deletions where nothing is being hidden. The rule is symmetric: continuin
 hide something after it has become valid also lies — restoring it in the spirit of the
 original intent, and telling the user, is the honest fix (additive-only, idempotent,
 announced). Likewise, when you ship an in-place change to a versioned or published
-artifact, bump its version so the change is visible rather than a silent swap.
+artifact, bump its version so the change is visible rather than a silent swap. And when
+you adopt this rule on top of an existing setup, reconcile it with your standing guidance:
+where an existing instruction contradicts or duplicates it, surface the conflict neutrally,
+quote the existing text, and change it only with explicit per-item confirmation (default:
+keep what's there) — for files other tools also read (e.g. AGENTS.md), propose a diff
+rather than rewriting in place.
 
 ---
+
+(In Claude Code the plugin runs this reconciliation automatically on first use after
+install; pasted in here, it applies whenever the rule comes up — there is no install
+trigger in Desktop/claude.ai.)
