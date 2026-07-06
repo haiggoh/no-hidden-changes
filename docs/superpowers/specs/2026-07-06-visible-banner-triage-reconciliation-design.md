@@ -101,12 +101,16 @@ against that project's `CLAUDE.md`/`AGENTS.md`.)
 - **Marker-gating unchanged**: the script still only *detects and offers*; it
   never writes markers. `stamped_current()` for `global-reconciled` and
   `proj_<cksum>` decides which branch (if any) contributes first-run fields.
-- **`RECON_VERSION` stays `1.2.0`** — it is unchanged because the reconciliation
-  *semantics* (what counts as a conflict, marker paths) are unchanged; only the
-  *presentation* improves. Bumping it would force a re-offer on already-
-  reconciled installs — an unwanted re-nag. The **plugin** version bumps to
-  1.3.0; the **reconciliation** version does not. These are deliberately
-  decoupled.
+- **`RECON_VERSION` bumps to `1.3.0` in lockstep with the plugin version.**
+  Existing markers contain `1.2.0`, so `stamped_current()` treats them as stale
+  and the first-run reconciliation (new banner + triage flow) re-fires on the
+  next session after update — which is exactly the dogfooding path we want to
+  exercise. The two versions are kept **coupled** (one concept, not two).
+  - *Future reconsideration:* if a real userbase forms, a presentation-only
+    change coupled this way would re-offer to everyone — mildly user-hostile.
+    At that point, decouple: bump `RECON_VERSION` only when reconciliation
+    *semantics* change, not on every plugin bump. Not worth the complexity now
+    (sole user).
 - **Zero-dependency JSON**: every string is static and known at author time, so
   it is stored **already JSON-escaped** in the script; only the marker *paths*
   (which contain just `/`, `$HOME`, and digits) are interpolated. No `jq`/
@@ -161,8 +165,9 @@ Remove the standalone mandatory Desktop caveat from the always-shown text.
 
 ## Rollout notes
 
-- Markers are unaffected; existing installs that already reconciled at `1.2.0`
-  stay reconciled (the version marker is about the *reconciliation* version, not
-  the plugin version, and reconciliation logic is unchanged — no re-run forced).
-- This spec commit is docs-only and does **not** bump `plugin.json`; the bump
-  lands with the implementation.
+- **Re-run is intended.** Bumping `RECON_VERSION` to `1.3.0` supersedes the
+  existing `1.2.0` markers, so the reconciliation re-offers once on the first
+  session after update (dogfooding). It writes fresh `1.3.0` markers on
+  completion and then goes quiet again.
+- This spec commit is docs-only and does **not** bump `plugin.json`; the plugin
+  and reconciliation version bumps (both to 1.3.0) land with the implementation.
