@@ -39,12 +39,26 @@ in-place change to a published/versioned artifact without bumping its version is
 silent swap, so bump `plugin.json` to keep the change visible and attributable.
 
 **First-run reconciliation (Claude Code):** the first session after you install — and once
-per new project — the plugin offers to reconcile this rule with your *existing* memories /
-`CLAUDE.md` / `AGENTS.md`, surfacing anything that contradicts or duplicates it. It only
-surfaces and proposes (per-item, verbatim, default: keep); nothing is rewritten without your
-confirmation, and files other tools read (e.g. `AGENTS.md`) are offered as diffs. Note that
-plugin hooks activate on the **next** session, so **start a fresh session after installing**
-for the pass to run.
+per new project — the plugin does a one-time check of this rule against your *existing*
+memories / `CLAUDE.md` / `AGENTS.md`.
+
+What you'll see:
+- **At session start**, a short banner — *👋 no-hidden-changes active — on your first message
+  I'll check this rule against your existing setup…* It announces the check; it can't report a
+  result yet (nothing has been read at that point).
+- **After your first message**, a one-line result: 🟢 *zero conflicts, nothing to reconcile*
+  and Claude continues with your request — or 🟡 *found something*, followed by a concise,
+  per-item, **verbatim, default-keep** surface and a single informed offer. Nothing is
+  rewritten without your confirmation; files other tools read (e.g. `AGENTS.md`) are offered
+  as diffs.
+
+**What it cannot see:** the reconciliation reads your Claude Code memories / `CLAUDE.md` /
+`AGENTS.md`, but it **cannot** read your claude.ai / Claude Desktop **Custom Instructions** —
+those live server-side, out of a session's reach. If you keep this rule (or one that conflicts
+with it) there, review that leg manually in Desktop.
+
+Note that plugin hooks activate on the **next** session, so **start a fresh session after
+installing** for the pass to run.
 
 ## Install — Claude Desktop / claude.ai (copy-paste)
 

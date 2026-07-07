@@ -50,44 +50,56 @@ Sometimes there is no native mechanism. Then treat invisibility as a real cost, 
 
 ## Reconcile with the user's existing guidance
 
-Almost everyone installs this rule *on top of* an existing setup. Old standing guidance can
-**contradict**, **duplicate**, or **overlap** it — and letting that sit unsurfaced is itself
-a hidden change. So on the first session after install (a SessionStart offer prompts you),
-once per new project, and reactively whenever the rule is about to apply, reconcile it with
-the user's guidance. Always **surface first and change only after an informed, per-item
-choice — never silently, never a blind "apply all."**
+Almost everyone installs this rule *on top of* an existing setup. Old standing
+guidance can **contradict**, **duplicate**, or **overlap** it — and letting that
+sit unsurfaced is itself a hidden change. So on the first session after install
+(a SessionStart banner announces it), once per new project, and reactively when
+the rule is about to apply, reconcile it with the user's guidance — **triage
+first, and be brief.**
 
-**Sources you can read here (Claude Code):** global auto-memory (`~/.claude` `MEMORY.md` +
-memory dir) and `CLAUDE.md` / `AGENTS.md`. You **cannot** read the user's claude.ai/Desktop
-custom instructions — do not claim to have covered them; tell the user that leg must be
-reviewed manually in Desktop.
+**Triage first — before saying anything.** Silently read the readable guidance
+and compare it to the rule:
 
-- **Contradiction** — quote the conflicting instruction **verbatim** and explain the clash
-  **neutrally**: present both it and the rule as possibly-intentional (no "old one is
-  wrong/regretted" framing). Recommend the transparency-improving change, but **default to
-  keeping the existing instruction** unless the user actively chooses to change it.
-- **Duplication** — point out the near-identical rule; propose one canonical source. If the
-  near-duplicate is *this plugin's own shipped text* (pasted template / reinstall), keep the
-  user's on-disk copy (it survives uninstall) rather than making the plugin canonical.
+- **Sources you can read (Claude Code):** global auto-memory (`~/.claude`
+  `MEMORY.md` + memory dir) and `CLAUDE.md` / `AGENTS.md`. You **cannot** read
+  claude.ai/Desktop custom instructions.
+- **Nothing to reconcile** (the common case): write the marker(s) and reply with
+  a single line led by 🟢 — *"🟢 Checked your existing setup — zero conflicts,
+  nothing to reconcile."* — then go straight to the user's actual request. Do
+  **not** explain the feature at length.
+- **Something to reconcile:** lead with one 🟡 line — *"🟡 Found N item(s) worth
+  reconciling — below."* — then surface it concisely (below). Only in this path,
+  add a short note that Desktop custom instructions couldn't be read.
+
+**Surfacing a finding — surface first, change only after an informed, per-item
+choice; never silently, never a blind "apply all":**
+
+- **Contradiction** — quote the conflicting instruction **verbatim** and explain
+  the clash **neutrally**: both it and the rule as possibly-intentional (no "old
+  one is wrong/regretted" framing). Recommend the transparency-improving change,
+  but **default to keeping** the existing instruction unless the user actively
+  chooses to change it.
+- **Duplication** — point out the near-identical rule; propose one canonical
+  source. If the near-duplicate is *this plugin's own shipped text* (pasted
+  template / reinstall), keep the user's on-disk copy (it survives uninstall).
 - **Overlap** — state how you'll reconcile and confirm, per item.
 
-**Convenient batch (opt-in):** you may open with an inviting offer — e.g. "Want me to review
-your earlier instructions and suggest changes that make your setup more transparent?" On
-yes, show **all** proposed before/after diffs together for a single **informed** approval
-(the user may take the set, a subset, or none). That is review-then-approve, not blind-apply.
+**One informed batch (opt-in):** show **all** proposed before/after diffs
+together for a single approval — the user may take the set, a subset, or none.
+Review-then-approve, not blind-apply.
 
 **Persisting a resolution:**
-- Personal auto-memory / *uncommitted* `CLAUDE.md` → edit in place after confirmation; treat
-  the `MEMORY.md` index entry and its linked note as one unit, and show true line-level diffs.
-- *Committed* `CLAUDE.md`, and **always** `AGENTS.md` (other tools read it) → propose a diff
-  to commit; never auto-commit, and flag `AGENTS.md`'s cross-tool reach.
-- **Record declines** as durable notes ("kept X over the rule on <date>") and respect them —
-  never re-nag a settled decision.
+- Personal auto-memory / *uncommitted* `CLAUDE.md` → edit in place after
+  confirmation; treat the `MEMORY.md` index entry and its linked note as one unit.
+- *Committed* `CLAUDE.md`, and **always** `AGENTS.md` (other tools read it) →
+  propose a diff to commit; never auto-commit, and flag `AGENTS.md`'s cross-tool reach.
+- **Record declines** as durable notes ("kept X over the rule on <date>") and
+  respect them — never re-nag a settled decision.
 
-**The once-only marker:** the SessionStart offer gives you the marker path(s) and the
-reconciliation version. Write the version into the marker **only after the pass completes or
-the user dismisses it** — never before. An un-acted pass then simply re-offers next session,
-so it cannot be lost.
+**The once-only marker:** the SessionStart prompt gives you the marker path(s)
+and the reconciliation version. Write the version into the marker **only after
+the pass completes or the user dismisses it** — never before. An un-acted pass
+then simply re-offers next session, so it cannot be lost.
 
 ## Canonical anti-pattern
 
