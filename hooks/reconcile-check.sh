@@ -16,7 +16,7 @@
 
 set -uo pipefail
 
-RECON_VERSION='1.2.0'
+RECON_VERSION='1.3.0'
 DIR="$HOME/.claude/.no-hidden-changes"
 GLOBAL="$DIR/global-reconciled"
 PROJ_KEY="$(printf '%s' "${PWD:-unknown}" | cksum | tr -d ' ')"
