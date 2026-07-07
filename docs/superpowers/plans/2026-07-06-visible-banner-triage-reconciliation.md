@@ -269,8 +269,8 @@ Expected: the only "cannot read claude.ai/Desktop" mention is inside the triage 
 
 - [ ] **Step 3: Verify wording consistency with the hook prompt**
 
-Run: `grep -c "TRIAGE\|🟢\|🟡" skills/no-hidden-changes/SKILL.md`
-Expected: ≥ 3 (triage-first + both semaphores present, matching Task 1's `COMMON`).
+Run: `grep -qi "triage" skills/no-hidden-changes/SKILL.md && grep -q "🟢" skills/no-hidden-changes/SKILL.md && grep -q "🟡" skills/no-hidden-changes/SKILL.md && echo OK`
+Expected: `OK` — triage-first framing + both semaphores present, matching Task 1's `COMMON`. (Presence checks, not `grep -c` line-counting: the two semaphores share single lines and the skill prose uses lowercase "triage", so a `-c` count under-reports.)
 
 - [ ] **Step 4: Commit**
 
@@ -371,12 +371,15 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:** none (git + manual verification)
 
-- [ ] **Step 1: Push**
+- [ ] **Step 1: Push the feature branch + open a PR** (never push straight to `main`)
 
 ```bash
-git push origin main
+git push -u origin feat/visible-banner-triage
+gh pr create --base main --head feat/visible-banner-triage \
+  --title "Visible banner + triage-first reconciliation (v1.3.0)" \
+  --body "Implements docs/superpowers/plans/2026-07-06-visible-banner-triage-reconciliation.md"
 ```
-Expected: fast-forward push; `git rev-list --left-right --count origin/main...HEAD` → `0  0`.
+Expected: branch pushed with upstream set; PR opened against `main`. Merge only after review; dogfood from the merged `main`.
 
 - [ ] **Step 2: Update the installed plugin** (in the user's Claude Code, interactive)
 
