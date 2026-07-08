@@ -6,6 +6,11 @@
       "name": "no-hidden-changes",
       "source": "./",
       "description": "Prefer visible, honest, reversible changes over hidden-state workarounds."
+    },
+    {
+      "name": "measure-twice",
+      "source": { "source": "github", "repo": "haiggoh/measure-twice" },
+      "description": "Before building automation, survey for what already exists and match the trigger to the real event."
     }
   ]
 }
