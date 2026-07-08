@@ -22,9 +22,16 @@ don't make a tool's own UI lie about its state.
 ## Install — Claude Code (one-click)
 
 ```
-/plugin marketplace add haiggoh/no-hidden-changes
+/plugin marketplace add haiggoh/claude-code-desktop-sync
 /plugin install no-hidden-changes@haiggoh
 ```
+
+> The `haiggoh` marketplace catalog is hosted in the
+> [`claude-code-desktop-sync`](https://github.com/haiggoh/claude-code-desktop-sync) repo
+> and lists several `haiggoh` plugins. Add the marketplace once from there, then install
+> any of them by name — including this one. (This repo intentionally ships no
+> `marketplace.json` of its own; a second catalog under the same `haiggoh` name would
+> collide with the canonical one.)
 
 You get:
 - a `no-hidden-changes` **skill** (visible in `/skills`, zero token cost until
