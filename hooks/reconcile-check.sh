@@ -13,8 +13,43 @@
 # pass simply re-offers next session and cannot be silently lost.
 #
 # Pure bash (3.2-compatible); no jq/python dependency at runtime.
+#
+# Cross-plugin ordering: this hook is meant to be the FIRST SessionStart banner to
+# land (resume-interrupted and waypoints sequence themselves after it — see their own
+# hooks). It never waits on anything itself; it just signals "done deciding" as soon as
+# it has emitted its output, via a session-scoped flag any other plugin's hook may poll:
+# `$TMPDIR-or-/tmp/claude-sessionstart-banners/<session_id>.no-hidden-changes.done`. This
+# is one-way and best-effort — a missing/unparseable session_id just means no flag is
+# written, which never blocks this hook's own output.
 
 set -uo pipefail
+
+# Read the hook's stdin JSON once, defensively: `-t 0` skips the read when fd0 is a
+# terminal (manual/test invocation), so this can never hang waiting for input that will
+# never come. When piped (the real SessionStart invocation), a single `cat` drains it.
+STDIN_JSON=""
+if [ ! -t 0 ]; then
+  STDIN_JSON="$(cat 2>/dev/null || true)"
+fi
+SESSION_ID="$(printf '%s' "$STDIN_JSON" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+
+_banner_flag_dir() {
+  printf '%s' "${TMPDIR:-${XDG_RUNTIME_DIR:-/tmp}}/claude-sessionstart-banners"
+}
+
+# Best-effort, session-scoped "I'm done deciding" flag for any OTHER plugin's
+# SessionStart hook to optionally poll on. Never blocks; sid-less sessions get no flag
+# since nothing could key on them anyway. Always called via `trap ... EXIT` below so it
+# fires on every exit path, not just the success path.
+_signal_done() {
+  [ -n "$SESSION_ID" ] || return 0
+  local dir; dir="$(_banner_flag_dir)"
+  mkdir -p -m 700 "$dir" 2>/dev/null || return 0
+  local path="$dir/${SESSION_ID}.no-hidden-changes.done"
+  local tmp="${path}.tmp.$$"
+  printf 'producer=no-hidden-changes\n' > "$tmp" 2>/dev/null && mv -f "$tmp" "$path" 2>/dev/null
+}
+trap _signal_done EXIT
 
 # Triage epoch — the ONLY thing that gates re-arming the reconciliation.
 # Bump this (2, 3, ...) ONLY when the rule text changes in a way that could turn
