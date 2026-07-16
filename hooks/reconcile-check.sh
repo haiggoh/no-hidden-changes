@@ -103,13 +103,20 @@ stamped_current() {
 # `launchctl list` (churns with PIDs/transient jobs -> false re-arms) and system dirs;
 # the model's census still reads those live, they just must not drive this check.
 surfaces_fingerprint() {
+  # Sorted before hashing: settings.json/settings.local.json get rewritten whenever any
+  # hook is installed/edited (by this or any other tool), and a rewrite can reorder existing
+  # "command" entries (JSON key/array order isn't guaranteed stable across writers) without
+  # changing the actual SET of automation. Hashing the raw (unsorted) stream turned every
+  # such reorder into a false re-arm — the census kept "changing" every session even though
+  # nothing about installed automation had. Sorting makes the fingerprint depend only on the
+  # set of lines, not their order.
   {
     crontab -l 2>/dev/null
     ls -1 "$HOME/Library/LaunchAgents" 2>/dev/null
     ls -1 "$HOME/.claude/scripts" 2>/dev/null
     grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json"       2>/dev/null
     grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.local.json" 2>/dev/null
-  } 2>/dev/null | cksum | tr -d ' '
+  } 2>/dev/null | sort | cksum | tr -d ' '
 }
 
 # Documented test seam: print the fingerprint and exit (used by tests/test_hook.sh).
