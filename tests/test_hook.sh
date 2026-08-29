@@ -15,8 +15,14 @@ pass=0; fail=0
 check() { if [ "$1" -eq 0 ]; then echo "  PASS: $2"; pass=$((pass+1)); else echo "  FAIL: $2"; fail=$((fail+1)); fi; }
 sysmsg() { jq -r '.systemMessage // ""' "$1"; }
 ctx()    { jq -r '.hookSpecificOutput.additionalContext' "$1"; }
-run()    { ( cd "$2" && HOME="$1" bash "$HOOK" ); }   # run <home> <cwd>
-fp()     { NHC_EMIT_SURFACES=1 HOME="$1" bash "$HOOK"; }  # surfaces fingerprint for a HOME
+# </dev/null on both: these cases exercise the hook's reconcile LOGIC, not its stdin
+# handling, so they must not inherit the caller's fd0. Two reasons. The hook reads stdin
+# when fd0 is not a terminal, so inheriting it (a) makes every case pay the read's
+# timeout when the caller holds stdin open, and (b) lets the hook CONSUME the caller's
+# own input — if the caller is a shell reading its script from stdin, that swallows the
+# rest of the script. Case I is the one place stdin shape is deliberately the subject.
+run()    { ( cd "$2" && HOME="$1" bash "$HOOK" </dev/null ); }   # run <home> <cwd>
+fp()     { NHC_EMIT_SURFACES=1 HOME="$1" bash "$HOOK" </dev/null; }  # surfaces fingerprint for a HOME
 
 command -v jq >/dev/null 2>&1 || { echo "jq required for tests"; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -111,6 +117,9 @@ HOOKPID=$!
 i=0
 while kill -0 "$HOOKPID" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i+1)); done
 if kill -0 "$HOOKPID" 2>/dev/null; then
+  # Reap the blocked reader too, or a regression leaves a stuck process behind. Direct
+  # children only: without setsid there is no private process group to signal here.
+  pkill -P "$HOOKPID" 2>/dev/null || true
   kill "$HOOKPID" 2>/dev/null; wait "$HOOKPID" 2>/dev/null
   check 1 "hook returns within 3s when stdin never reaches EOF (it blocked)"
   check 1 "hook still emits valid JSON on a never-EOF stdin (never returned)"
