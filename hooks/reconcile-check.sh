@@ -24,12 +24,23 @@
 
 set -uo pipefail
 
-# Read the hook's stdin JSON once, defensively: `-t 0` skips the read when fd0 is a
-# terminal (manual/test invocation), so this can never hang waiting for input that will
-# never come. When piped (the real SessionStart invocation), a single `cat` drains it.
+# Read the hook's stdin JSON once, defensively, and with a BOUND.
+#
+# `-t 0` alone is not enough. It distinguishes a terminal from "not a terminal", but the
+# non-terminal case has two shapes: a pipe that will reach EOF (the real SessionStart
+# invocation) and a pipe or socket the CALLER HOLDS OPEN and never closes (an agent's
+# shell tool, a CI runner, a test harness). An unbounded `cat` returns for the first and
+# blocks forever on the second — and because this is a SessionStart hook, blocking here
+# does not merely slow something down, it stalls the start of the session.
+#
+# `read -t 1 -d ''` covers both: EOF ends the read immediately, so a real piped payload
+# costs nothing, while a never-closing caller costs at most one second. It returns
+# non-zero on timeout but still populates the variable with whatever arrived, which is
+# why the `|| true` is load-bearing rather than decorative. Integer timeout only: bash
+# 3.2 predates fractional `-t`.
 STDIN_JSON=""
 if [ ! -t 0 ]; then
-  STDIN_JSON="$(cat 2>/dev/null || true)"
+  IFS= read -r -t 1 -d '' STDIN_JSON 2>/dev/null || true
 fi
 SESSION_ID="$(printf '%s' "$STDIN_JSON" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 
