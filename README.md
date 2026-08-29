@@ -101,6 +101,16 @@ skill fires when it matters — the same pattern the Superpowers framework uses.
 It is **guidance, not a hard gate**: it prompts Claude to prefer the visible path
 or flag the trade-off, not to block anything.
 
+### `scripts/sudo-in-terminal.sh`
+
+One piece of this plugin is not guidance but a tool, because one case cannot be solved by preferring
+the visible path — it has to be *made* visible. `sudo` needs a TTY and an agent's shell tool has
+none, so the password prompt never appears. The two tempting fixes are exactly the anti-patterns this
+plugin exists to stop: a hidden sudo-free workaround, or claiming success because the command was
+attempted. The script opens a real Terminal window with the command already running, then polls a
+`--verify` condition and reports `VERIFIED` / `NOT_VERIFIED` — outcome, not assumption. With
+`--verify`, an already-correct state prints `ALREADY_SATISFIED` and opens no window.
+
 ## License
 
 MIT © Heiko Brantsch

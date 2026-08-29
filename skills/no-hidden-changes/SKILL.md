@@ -54,6 +54,30 @@ Durable automation — a hook, cron job, launch agent, watcher, or background sc
 
 Reach first for what the tool ships with: per-item toggles, documented settings, standard menus, feature flags. These keep the change visible where users expect to find it, and reversible by someone who has never heard of your workaround. A native path that costs a little more is usually worth it.
 
+### When the native path needs a human, hand it over — do not route around it
+
+The worst version of this rule's failure is a command that *cannot* prompt. On macOS, `sudo` needs a
+TTY, and an agent's shell tool has none — so the prompt never appears, the command fails, and the
+tempting fixes are both anti-patterns: build a sudo-free workaround (a hidden side-channel), or
+report success because the command was *attempted* (a claim without evidence).
+
+`scripts/sudo-in-terminal.sh` is the visible path instead. It drives Terminal.app via osascript so
+the command is already entered and running, the human only types their password, and then it **polls
+a `--verify` condition and reports `VERIFIED` / `NOT_VERIFIED`** — so success is confirmed by outcome
+rather than assumed:
+
+```sh
+scripts/sudo-in-terminal.sh \
+  --command "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" \
+  --verify  '[ "$(xcode-select -p)" = "/Applications/Xcode.app/Contents/Developer" ]' \
+  --label   "point xcode-select at full Xcode"
+```
+
+Always pass `--verify`. With it, an already-correct state prints `ALREADY_SATISFIED` and **opens no
+window at all**, so the visible path never becomes a nag — which is the same reason this rule treats
+stale hidden state as a lie: interrupting someone about a change that already happened is its own
+kind of inaccuracy.
+
 ## When hidden state is truly unavoidable
 
 Sometimes there is no native mechanism. Then treat invisibility as a real cost, not a neutral: surface it loudly, document it in the most discoverable place available, and prefer a form that explains itself in place (a clearly-named marker, an in-UI note) over a silent side-channel. Optimize for the person who will find this later without knowing the trick exists.
