@@ -97,5 +97,29 @@ OUT="$TMP/h2.json"; run "$HH" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "changed surfaces re-arm reconciliation"
 case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=0;; *) r=1;; esac; check $r "surface-change pass carries the census"
 
+echo "== Case I: stdin that never reaches EOF must not hang the hook =="
+# A SessionStart hook runs before the session is usable, so an unbounded read is not a
+# slow test — it is a stalled startup. `[ ! -t 0 ]` does NOT distinguish "a pipe that
+# will reach EOF" from "a pipe/socket the caller holds open", so this case supplies the
+# second kind: a FIFO whose write end this shell keeps open, meaning EOF never arrives.
+HI="$TMP/home_i"; mkdir -p "$HI"
+FIFO="$TMP/never-eof"; mkfifo "$FIFO"
+exec 3<>"$FIFO"                     # read-write: a writer always exists, so no EOF, ever
+OUT="$TMP/i.json"
+( cd "$CWD" && HOME="$HI" bash "$HOOK" <&3 ) > "$OUT" 2>/dev/null &
+HOOKPID=$!
+i=0
+while kill -0 "$HOOKPID" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i+1)); done
+if kill -0 "$HOOKPID" 2>/dev/null; then
+  kill "$HOOKPID" 2>/dev/null; wait "$HOOKPID" 2>/dev/null
+  check 1 "hook returns within 3s when stdin never reaches EOF (it blocked)"
+  check 1 "hook still emits valid JSON on a never-EOF stdin (never returned)"
+else
+  wait "$HOOKPID" 2>/dev/null
+  check 0 "hook returns within 3s when stdin never reaches EOF"
+  jq . "$OUT" >/dev/null 2>&1; check $? "hook still emits valid JSON on a never-EOF stdin"
+fi
+exec 3>&-
+
 echo; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ]
