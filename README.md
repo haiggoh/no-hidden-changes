@@ -19,6 +19,28 @@ honest alternative (keep them registered/visible, use the native per-session
 disable) preserved the vanilla UX. Generalized, that lesson is this project:
 don't make a tool's own UI lie about its state.
 
+### The same shape shows up in code, not just config
+
+Three variants are easy to commit by reflex, and 1.6.0 puts them in the SessionStart nudge —
+the one surface every session sees, whatever model is driving it:
+
+- **Editing a derived copy instead of its source.** An installed plugin cache, a symlinked live
+  file, or a generated config works the moment you change it, then the next update overwrites it
+  with no error and no version change. The fix silently reverts, is not version controlled, and
+  cannot ship to anyone. (The installed copy can also be *older* than the repo, so it is worth
+  confirming which one a change has to reach.)
+- **Landing unrelated work as one lump on the default branch**, or switching the branch of a
+  checkout that launchers and symlinks resolve through — that branch is effectively global state,
+  so switching it changes which code the user runs, silently. `git add -A` belongs here too: it
+  stages by *capture*, including the user's unsaved work.
+- **Rewriting published history** — a force-push or a moved tag — so what a consumer already
+  fetched no longer matches what exists. Fix forward as the next version instead; a rewrite does
+  not even remove a leaked secret.
+
+These were added because a session committed straight to `main` across four repositories in one
+sitting while the rule existed only in a memory file and in the system prompt for one class of
+session. A rule that is not on the always-on surface gets missed.
+
 ## Install — Claude Code (one-click)
 
 ```

@@ -130,5 +130,57 @@ else
 fi
 exec 3>&-
 
+# --- the NUDGE must carry the reflex-commit shapes -------------------------------------
+# The nudge is the only surface that reaches EVERY session regardless of model, so it is where
+# the always-on rules have to live. These were added after a GATEWAY session committed straight
+# to main on four repos in one sitting while the rule existed only in memory and in the free-lane
+# system prompt — proof that a rule not on this surface gets missed.
+NH="$TMP/home_nudge"; mkdir -p "$NH"
+NOUT="$TMP/nudge.json"
+( HOME="$NH" bash "$HOOK" </dev/null ) > "$NOUT" 2>/dev/null
+NUDGE="$(ctx "$NOUT")"
+
+for probe in \
+  "EDIT THE SOURCE, NOT A DERIVED COPY" \
+  "plugins/cache" \
+  "BRANCH, and stage BY PATH" \
+  "git add -A" \
+  "worktree" \
+  "NEVER force-push" \
+  "fix forward"
+do
+  case "$NUDGE" in
+    *"$probe"*) check 0 "the nudge carries: $probe" ;;
+    *) check 1 "the nudge carries: $probe" ;;
+  esac
+done
+
+# A code span must survive as a LITERAL backtick. Passing prose through a double-quoted shell
+# string command-substitutes a span and silently deletes it while the command still exits 0,
+# so this asserts the stored text rather than trusting the writer.
+case "$NUDGE" in
+  *'`git add -A`'*) check 0 "a code span in the nudge keeps its literal backticks" ;;
+  *) check 1 "a code span in the nudge keeps its literal backticks" ;;
+esac
+# …and the apostrophe in "the user's unsaved work" survived the same quoting.
+case "$NUDGE" in
+  *"user's unsaved work"*) check 0 "an apostrophe in the nudge survives shell quoting" ;;
+  *) check 1 "an apostrophe in the nudge survives shell quoting" ;;
+esac
+
+# The skill's own frontmatter must be parseable YAML. A description containing a colon-space
+# must be QUOTED or a strict parser rejects the whole file and the skill never loads.
+python3 - "$HERE/../skills/no-hidden-changes/SKILL.md" <<'PYCHK'
+import sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+fm = open(sys.argv[1]).read().split("---\n")[1]
+d = yaml.safe_load(fm)
+assert isinstance(d, dict) and "description" in d, "frontmatter must define a description"
+PYCHK
+check $? "the skill's frontmatter is valid YAML (a colon-space description must be quoted)"
+
 echo; echo "PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ]

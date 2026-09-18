@@ -1,6 +1,6 @@
 ---
 name: no-hidden-changes
-description: Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool's built-in toggle, menu, or setting. Also applies when a change keeps hiding state that has since become valid (stale state lies too), or ships an in-place edit to a versioned/published artifact (plugin, package, shared config) without bumping its version, or installs durable automation (a hook, cron job, launch agent, or background script) without first surveying for an existing mechanism that already does the job or recording what it installed. On first use after install (and once per new project), also reconcile this rule against the user's existing memories / CLAUDE.md / AGENTS.md — and take a one-time inventory of installed automation — surfacing contradictions, duplicates, or undocumented automation before they operate unseen. The test: will a future user opening the tool's own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don't trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.
+description: 'Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool''s built-in toggle, menu, or setting. Also applies when a change keeps hiding state that has since become valid (stale state lies too), or ships an in-place edit to a versioned/published artifact (plugin, package, shared config) without bumping its version, or edits a DERIVED copy instead of its source (an installed plugin cache, a symlinked live file, a build output, a generated config) where the next update silently reverts it, or lands unrelated work as one lump on the default branch, switches the branch of a checkout other tooling resolves through, stages with `git add -A`, or rewrites published history (a force-push or a moved tag), or installs durable automation (a hook, cron job, launch agent, or background script) without first surveying for an existing mechanism that already does the job or recording what it installed. On first use after install (and once per new project), also reconcile this rule against the user''s existing memories / CLAUDE.md / AGENTS.md — and take a one-time inventory of installed automation — surfacing contradictions, duplicates, or undocumented automation before they operate unseen. The test: will a future user opening the tool''s own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don''t trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.'
 ---
 
 # No Hidden Changes
@@ -21,6 +21,9 @@ Stop and apply this skill the moment a solution involves any of these:
 - Shipping an in-place change to a versioned/published artifact (plugin, package, shared config) without bumping its version.
 - Adding a recurring hook, cron job, or launch agent without first checking whether an existing mechanism already does the job — a duplicate hides from every native view.
 - Installing durable automation (a hook, cron, agent, watcher, or background script) without recording it anywhere discoverable.
+- Editing a **derived** copy instead of its source: an installed plugin cache, a symlinked live file, a build output, a generated config.
+- Landing unrelated work as one lump on the default branch, or switching the branch of a checkout that other tooling resolves through.
+- Rewriting published history (a force-push, a moved tag) so what a consumer already fetched no longer matches what is there now.
 
 ## The one check
 
@@ -49,6 +52,32 @@ Durable automation — a hook, cron job, launch agent, watcher, or background sc
 **Before building — survey.** Reaching for the most salient tool (a fresh cron, a new script) risks duplicating machinery that already exists. A second mechanism doing a job the first already does is hidden state in the *read* direction: each native surface (the crontab, the launch-agent folder, a hooks config) shows only *itself*, so none of them reveals the duplicate, and a later session meets redundant or conflicting behavior with no single place that explains it. So first scan the surfaces that already hold automation — hooks config, `crontab`, launch agents, `~/.claude/scripts`, scheduled tasks, and your own notes/memory — and extend what's there instead of adding a rival.
 
 **After building — document.** Installing background machinery without recording it anywhere is a hidden change in the *write* direction: the environment now behaves in a way no native UI attributes to anything, so the next session (or user) sees effects with no visible cause and can't tell what installed them, when they fire, or whether they're safe to touch. That's the empty-menu lie, aimed at background behavior instead of a listing. The moment you create durable automation, record it in the most discoverable place available — a memory/index entry, a comment at the install site, a README line — naming the mechanism, the trigger that fires it, and where it lives. Undocumented automation is invisible automation: findable by luck, not by search.
+
+## Edit the source, not the derived copy
+
+An installed plugin cache (`~/.claude/plugins/cache/<owner>/<plugin>/<version>/`), a symlinked live script, a build output, a generated config — these are **derived artifacts**, and editing one is a hidden change in its purest form. The change works immediately, which is exactly what makes it dangerous:
+
+- **It is not version controlled**, so there is no diff, no history, and no way for anyone to review or find it.
+- **It will be silently destroyed.** The next `claude plugin update`, reinstall, or regeneration overwrites it with no error and no warning — and the version string will not change, so nothing signals that behaviour just reverted.
+- **It cannot ship.** Nobody else gets it, so the "fix" exists on exactly one machine.
+
+This is the empty-menu lie pointed at code: the running system behaves in a way its own source does not explain. Measured cost: two bugfixes hand-patched into a plugin cache had to be re-applied afterwards from a note, and only because a note happened to exist.
+
+**So: find the writer and change that.** Locate the source repo from the plugin's `homepage`/`repository` field in `.claude-plugin/plugin.json`, from a local clone in whatever directory the user keeps checkouts in (discover that name — it is a local convention, not a standard), or by cloning it fresh. Then ship it properly and refresh the installed copy. If no source exists — a third-party plugin with no clone — say so and ask rather than quietly editing the cache. If a cache edit is genuinely unavoidable as a stopgap, it is not finished until it is recorded somewhere durable naming the file, the change, and the fact that an update reverts it.
+
+A corollary for a **stale installed copy**: if the repo says 1.5.0 and the installed cache says 1.4.2, the user is running the older code. Verify which copy your change has to reach before concluding it is live.
+
+## Keep history honest: branch, stage by path, never rewrite
+
+The same discoverability test applies to version control, where the "native UI" is the history itself.
+
+**Work on a feature branch.** Accumulating several unrelated changes in the working tree and committing them to the default branch as one lump hides each change inside the others: nothing can be reviewed, reverted, or understood on its own. Branch per topic, commit in coherent units, and say WHY in the message.
+
+**Use a worktree when the checkout is shared.** If a repo's working tree is reached through symlinks, a plugin cache, or a launcher that resolves a fixed path, then its checked-out branch is **global state** — it decides which code the user actually runs. Switching it silently swaps their tooling, and nothing errors. Use `git worktree add ../<repo>-<topic> -b <topic>` instead, leave the shared checkout on its default branch, and put it back if a switch was unavoidable.
+
+**Stage by path.** `git add -A` and `git add .` clobber by *capture*: they stage whatever else is dirty, including work the user has not saved and files you never read. Name your paths, then read `git status --porcelain` and `git diff --staged` and confirm every staged path is one you meant.
+
+**Never force-push or move a published tag unasked.** Rewriting published history is the hidden change aimed at everyone downstream: what they fetched no longer matches what exists, with no signal. It is destructive and needs explicit permission. It also does not do what people hope — the old objects stay reachable on the host, so a force-push does **not** remove a leaked secret. Found a defect after tagging? **Fix forward** as the next version. And never point a documented download URL at a release that does not exist yet: publish the asset first, or the install route 404s.
 
 ## Prefer native mechanisms
 
