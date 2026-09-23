@@ -147,7 +147,10 @@ for probe in \
   "git add -A" \
   "worktree" \
   "NEVER force-push" \
-  "fix forward"
+  "fix forward" \
+  "EXACT NAME" \
+  "check-ignore" \
+  "no output is the warning"
 do
   case "$NUDGE" in
     *"$probe"*) check 0 "the nudge carries: $probe" ;;
@@ -161,6 +164,10 @@ done
 case "$NUDGE" in
   *'`git add -A`'*) check 0 "a code span in the nudge keeps its literal backticks" ;;
   *) check 1 "a code span in the nudge keeps its literal backticks" ;;
+esac
+case "$NUDGE" in
+  *'`git check-ignore -v <path>`'*) check 0 "the check-ignore span keeps its literal backticks" ;;
+  *) check 1 "the check-ignore span keeps its literal backticks" ;;
 esac
 # …and the apostrophe in "the user's unsaved work" survived the same quoting.
 case "$NUDGE" in
