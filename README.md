@@ -21,7 +21,7 @@ don't make a tool's own UI lie about its state.
 
 ### The same shape shows up in code, not just config
 
-Three variants are easy to commit by reflex, and 1.6.0 puts them in the SessionStart nudge —
+Four variants are easy to commit by reflex, and the SessionStart nudge carries them —
 the one surface every session sees, whatever model is driving it:
 
 - **Editing a derived copy instead of its source.** An installed plugin cache, a symlinked live
@@ -36,6 +36,11 @@ the one surface every session sees, whatever model is driving it:
 - **Rewriting published history** — a force-push or a moved tag — so what a consumer already
   fetched no longer matches what exists. Fix forward as the next version instead; a rewrite does
   not even remove a leaked secret.
+
+- **Ignoring a private file by EXACT NAME**, so the *next* private file of the same kind is
+  publishable by default. The repo looks configured for privacy while the protection covers only the
+  one path you named. Run `git check-ignore -v <path>` before the first commit of any new private
+  file — no output is the warning — and widen the pattern rather than adding names one at a time.
 
 These were added because a session committed straight to `main` across four repositories in one
 sitting while the rule existed only in a memory file and in the system prompt for one class of
