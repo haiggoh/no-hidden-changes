@@ -10,6 +10,8 @@ RECON_RULES_VERSION="$(sed -nE "s/^RECON_RULES_VERSION='([^']*)'.*/\1/p" "$HOOK"
 HOST_KEY="$(printf '%s' "$(hostname 2>/dev/null || uname -n)" | cksum | tr -d ' ')"
 GMARK="global-reconciled-${HOST_KEY}"
 SMARK="surfaces-${HOST_KEY}"
+# Snooze markers (new deferred state)
+GLOBAL_SNOOZE_MARK="global-snoozed-${HOST_KEY}"
 
 pass=0; fail=0
 check() { if [ "$1" -eq 0 ]; then echo "  PASS: $2"; pass=$((pass+1)); else echo "  FAIL: $2"; fail=$((fail+1)); fi; }
@@ -102,6 +104,61 @@ printf '%s' "0" > "$DH/$SMARK"
 OUT="$TMP/h2.json"; run "$HH" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "changed surfaces re-arm reconciliation"
 case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=0;; *) r=1;; esac; check $r "surface-change pass carries the census"
+
+echo "== Case J: snoozed global (deferred) with matching epoch and surfaces =="
+HJ="$TMP/home_j"; DJ="$HJ/.claude/.no-hidden-changes"; mkdir -p "$DJ"
+KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
+# Global NOT stamped (needs reconciliation), project stamped
+# This triggers the global branch where snooze is checked
+# Snooze with current epoch and matching surfaces fingerprint
+printf '%s|%s|2026-01-01' "$RECON_RULES_VERSION" "$(fp "$HJ")" > "$DJ/$GLOBAL_SNOOZE_MARK"
+OUT="$TMP/j.json"; run "$HJ" "$CWD" > "$OUT"
+jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON"
+case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "snoozed banner says deferred"
+case "$(sysmsg "$OUT")" in *"census deferred"*) r=0;; *) r=1;; esac; check $r "snoozed banner mentions census deferred"
+case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=1;; *) r=0;; esac; check $r "NO reconciliation prompt when snoozed"
+
+echo "== Case K: snoozed global with stale epoch re-arms =="
+HK="$TMP/home_k"; DK="$HK/.claude/.no-hidden-changes"; mkdir -p "$DK"
+KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
+# Global NOT stamped, project stamped
+# Snooze with OLD epoch (1) - should re-arm
+OLD_EPOCH=1
+printf '%s|%s|2026-01-01' "$OLD_EPOCH" "$(fp "$HK")" > "$DK/$GLOBAL_SNOOZE_MARK"
+OUT="$TMP/k.json"; run "$HK" "$CWD" > "$OUT"
+case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "snooze with stale epoch re-arms"
+
+echo "== Case L: snoozed global with changed surfaces re-arms =="
+HL="$TMP/home_l"; DL="$HL/.claude/.no-hidden-changes"; mkdir -p "$DL"
+KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
+# Global NOT stamped, project stamped
+# Snooze with current epoch but WRONG surfaces fingerprint
+printf '%s|%s|2026-01-01' "$RECON_RULES_VERSION" "99999999999999" > "$DL/$GLOBAL_SNOOZE_MARK"
+OUT="$TMP/l.json"; run "$HL" "$CWD" > "$OUT"
+case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "snooze with changed surfaces re-arms"
+
+echo "== Case M: snoozed project (deferred) with matching epoch =="
+HM="$TMP/home_m"; DM="$HM/.claude/.no-hidden-changes"; mkdir -p "$DM"
+KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
+# Global stamped, project NOT stamped -> triggers project branch
+printf '%s' "$RECON_RULES_VERSION" > "$DM/$GMARK"
+# Snooze project with current epoch
+PROJ_SNOOZE_MARK="proj_snoozed_${KEY}"
+printf '%s|2026-01-01' "$RECON_RULES_VERSION" > "$DM/$PROJ_SNOOZE_MARK"
+OUT="$TMP/m.json"; run "$HM" "$CWD" > "$OUT"
+case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "snoozed project banner says deferred"
+case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=1;; *) r=0;; esac; check $r "NO project reconciliation prompt when snoozed"
+
+echo "== Case N: snoozed project with stale epoch re-arms =="
+HN="$TMP/home_n"; DN="$HN/.claude/.no-hidden-changes"; mkdir -p "$DN"
+KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
+# Global stamped, project NOT stamped
+printf '%s' "$RECON_RULES_VERSION" > "$DN/$GMARK"
+PROJ_SNOOZE_MARK="proj_snoozed_${KEY}"
+# Snooze with OLD epoch (1) - should re-arm
+printf '%s|2026-01-01' "1" > "$DN/$PROJ_SNOOZE_MARK"
+OUT="$TMP/n.json"; run "$HN" "$CWD" > "$OUT"
+case "$(ctx "$OUT")" in *"reconciliation for THIS project"*) r=0;; *) r=1;; esac; check $r "snoozed project with stale epoch re-arms"
 
 echo "== Case I: stdin that never reaches EOF must not hang the hook =="
 # A SessionStart hook runs before the session is usable, so an unbounded read is not a

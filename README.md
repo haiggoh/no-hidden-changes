@@ -102,6 +102,11 @@ change-triggered, not a recurring scan. One honestly-accepted gap: automation ha
 outside Claude on a machine you never open a new session on again won't be re-caught; ongoing
 coverage is the *document-at-install* habit the rule asks for.
 
+**Deferred reconciliation (v1.7.1+):** if you're not ready to run the pass, dismiss the offer and
+it enters a "snoozed" state — a quiet banner ("census deferred since <date>") replaces the full
+prompt, so the deferral is **visible, never hidden**. The pass re-arms only when the rule epoch
+advances or (globally) the automation set changes, never silently.
+
 **What it cannot see:** the reconciliation reads your Claude Code memories / `CLAUDE.md` /
 `AGENTS.md`, but it **cannot** read your claude.ai / Claude Desktop **Custom Instructions** —
 those live server-side, out of a session's reach. If you keep this rule (or one that conflicts

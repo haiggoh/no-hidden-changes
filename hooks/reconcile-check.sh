@@ -82,6 +82,10 @@ SURFACES="$DIR/surfaces-${HOST_KEY}"
 PROJ_KEY="$(printf '%s' "${PWD:-unknown}" | cksum | tr -d ' ')"
 PROJ="$DIR/proj_${PROJ_KEY}"
 
+# Snooze marker files (deferred state - distinct from reconciled)
+GLOBAL_SNOOZE="$DIR/global-snoozed-${HOST_KEY}"
+PROJ_SNOOZE="$DIR/proj_snoozed_${PROJ_KEY}"
+
 # --- pure-bash JSON string escaper (bash 3.2 verified) ---
 json_escape() {
   local s=$1
@@ -104,6 +108,28 @@ stamped_current() {
   local v; v="$(cat "$1" 2>/dev/null)"
   case "$v" in *.*) v=1 ;; esac                 # legacy dotted version -> epoch 1
   [ "$v" -ge "$RECON_RULES_VERSION" ] 2>/dev/null
+}
+
+# Check if snoozed and still valid (epoch unchanged AND surfaces unchanged for global)
+snoozed_valid() {
+  local snooze_file="$1"
+  [ -f "$snooze_file" ] || return 1
+  local content; content="$(cat "$snooze_file" 2>/dev/null)"
+  [ -n "$content" ] || return 1
+
+  # Parse snooze file: epoch|surfaces_fingerprint|date
+  local snooze_epoch; snooze_epoch="$(printf '%s' "$content" | cut -d'|' -f1)"
+  local snooze_surfaces; snooze_surfaces="$(printf '%s' "$content" | cut -d'|' -f2)"
+
+  # Valid if epoch matches AND surfaces match (for global) or just epoch matches (for project)
+  if [ "$snooze_epoch" = "$RECON_RULES_VERSION" ]; then
+    if [ "$2" = "global" ] && [ "$snooze_surfaces" = "$CUR_SURFACES" ]; then
+      return 0
+    elif [ "$2" = "project" ]; then
+      return 0
+    fi
+  fi
+  return 1
 }
 
 # --- automation surfaces fingerprint (cheap change-detector for the census) ---
@@ -152,17 +178,34 @@ GLOBAL_PROMPT="[no-hidden-changes first-run reconciliation — non-blocking; do 
 PROJ_PROMPT="[no-hidden-changes reconciliation for THIS project — non-blocking] First session for the plugin in this project. Triage this project's CLAUDE.md/AGENTS.md/local guidance against the rule. ${COMMON} ONLY after the pass completes or is dismissed, write \"${RECON_RULES_VERSION}\" into \"${PROJ}\" (create dir \"${DIR}\" first). Do not create it beforehand."
 
 GLOBAL_BANNER="👋 no-hidden-changes active — on your first message I'll do a one-time check of this rule against your existing setup, plus a quick read-only inventory of installed automation (hooks, cron, launch agents, scripts), and flag anything that conflicts or looks undocumented. Nothing changes without your OK."
+GLOBAL_BANNER_SNOOZED="👋 no-hidden-changes: census deferred since $(date '+%Y-%m-%d') — new automation detected, reconciliation available on request."
+
 PROJ_BANNER="👋 no-hidden-changes: new project — on your first message I'll check this rule against this project's guidance. Nothing changes without your OK."
+PROJ_BANNER_SNOOZED="👋 no-hidden-changes: project reconciliation deferred since $(date '+%Y-%m-%d') — available on request."
 
 # Decide which (if any) first-run branch applies.
 context="$NUDGE"
 banner=""
+snoozed=0
+
 if ! stamped_current "$GLOBAL" || [ "$surfaces_changed" = "1" ]; then
-  context="${NUDGE}"$'\n\n'"${GLOBAL_PROMPT}"
-  banner="$GLOBAL_BANNER"
+  if snoozed_valid "$GLOBAL_SNOOZE" "global"; then
+    context="${NUDGE}"
+    banner="$GLOBAL_BANNER_SNOOZED"
+    snoozed=1
+  else
+    context="${NUDGE}"$'\n\n'"${GLOBAL_PROMPT}"
+    banner="$GLOBAL_BANNER"
+  fi
 elif ! stamped_current "$PROJ"; then
-  context="${NUDGE}"$'\n\n'"${PROJ_PROMPT}"
-  banner="$PROJ_BANNER"
+  if snoozed_valid "$PROJ_SNOOZE" "project"; then
+    context="${NUDGE}"
+    banner="$PROJ_BANNER_SNOOZED"
+    snoozed=1
+  else
+    context="${NUDGE}"$'\n\n'"${PROJ_PROMPT}"
+    banner="$PROJ_BANNER"
+  fi
 fi
 
 # Emit one JSON object. systemMessage only when a banner is set.

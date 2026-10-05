@@ -163,8 +163,27 @@ Review-then-approve, not blind-apply.
 
 **The once-only marker:** the SessionStart prompt gives you the marker path(s)
 and the reconciliation version. Write the version into the marker **only after
-the pass completes or the user dismisses it** — never before. An un-acted pass
-then simply re-offers next session, so it cannot be lost.
+the pass completes** — never before.
+
+**Deferred (snooze) state (v1.7.1+):** if the user is not ready to run the pass,
+they may **dismiss** it. In that case, write a *snooze marker* instead of the
+completed marker — `global-snoozed-<host>` or `proj_snoozed_<key>` — recording
+the epoch, the surfaces fingerprint (global only), and the date. This creates a
+third state distinct from both "unreconciled" and "reconciled":
+- **Unreconciled:** full banner + prompt (re-offers every session)
+- **Snoozed:** quiet banner "census deferred since <date>" (visible, not hidden)
+- **Reconciled:** no banner, pass complete
+
+A snooze is **valid** while the stamped epoch equals the current `RECON_RULES_VERSION`
+and (for global) the surfaces fingerprint still matches. If the epoch advances or
+the automation set changes, the snooze **expires and re-arms honestly** — never
+silently. This satisfies the plugin's own rule: the deferred state is surfaced,
+never hidden.
+
+**The once-only marker paths** (for completed passes):
+- Global: `~/.claude/.no-hidden-changes/global-reconciled-<host>`
+- Per-project: `~/.claude/.no-hidden-changes/proj_<key>`
+- Surfaces baseline: `~/.claude/.no-hidden-changes/surfaces-<host>`
 
 **Automation census (first global pass per machine, or when the installed set
 changes).** The same first-run pass also takes a one-time, read-only inventory of
