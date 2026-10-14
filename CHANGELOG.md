@@ -3,6 +3,21 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [1.7.2] — 2026-10-14
+
+### Changed — an exception to the immutable-tag rule: a tag on a BROKEN release moves
+
+The "never move a published tag" rule gains its failsafe (user rule, 2026-10-14): when the
+TAGGED COMMIT's own version surfaces disagree — manifest vs CHANGELOG vs docs, e.g. a
+conflict-marker manifest shipped by a rebase staging slip — the release is invisible to
+version-keyed installers (they fetch the HEAD manifest, read garbage, and fall back to the
+old version), and keeping the tag hides the fix behind a version that can never install.
+In that one case: fix the commit, move the tag onto it, and say plainly that the tag moved.
+The bar is version inconsistency inside the tagged commit itself; an ordinary post-tag
+mistake still fixes forward. Measured: free-agents v0.33.0 tagged on a merge carrying a
+conflict-marker manifest; with the user's okay the tag was deleted and re-pushed at the
+corrected commit.
+
 ## [1.7.1] — 2026-10-05
 
 ### Added — a "deferred" (snooze) state for the first-run reconciliation pass

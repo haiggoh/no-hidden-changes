@@ -81,6 +81,8 @@ The same discoverability test applies to version control, where the "native UI" 
 
 **Never force-push or move a published tag unasked.** Rewriting published history is the hidden change aimed at everyone downstream: what they fetched no longer matches what exists, with no signal. It is destructive and needs explicit permission. It also does not do what people hope — the old objects stay reachable on the host, so a force-push does **not** remove a leaked secret. Found a defect after tagging? **Fix forward** as the next version. And never point a documented download URL at a release that does not exist yet: publish the asset first, or the install route 404s.
 
+**EXCEPTION — a tag on a BROKEN release does not keep its place** (user rule, 2026-10-14). When the TAGGED COMMIT's own version surfaces disagree — manifest vs CHANGELOG vs docs, e.g. a conflict-marker manifest shipped by a rebase staging slip — the release is invisible to version-keyed installers: they fetch the HEAD manifest, read garbage, and fall back to the old version, so the update is hidden from the user in the worst possible way and stubbornly keeping the tag protects nothing. In that one case the more honest decision is to fix the commit and move the tag onto it, saying plainly that the tag moved. The bar is version inconsistency inside the tagged commit itself; an ordinary post-tag mistake still fixes forward.
+
 ## Prefer native mechanisms
 
 Reach first for what the tool ships with: per-item toggles, documented settings, standard menus, feature flags. These keep the change visible where users expect to find it, and reversible by someone who has never heard of your workaround. A native path that costs a little more is usually worth it.
