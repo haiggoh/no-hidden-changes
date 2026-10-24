@@ -6,6 +6,7 @@
 
   "manifest": ".claude-plugin/plugin.json",
   "changelog": "CHANGELOG.md",
+  "test_cmd": "bash tests/test_hook.sh && bash tests/test_sudo_in_terminal.sh",
 
 
 
