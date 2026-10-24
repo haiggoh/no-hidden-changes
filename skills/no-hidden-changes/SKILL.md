@@ -67,6 +67,15 @@ This is the empty-menu lie pointed at code: the running system behaves in a way 
 
 A corollary for a **stale installed copy**: if the repo says 1.5.0 and the installed cache says 1.4.2, the user is running the older code. Verify which copy your change has to reach before concluding it is live.
 
+**Testing a plugin change without touching the cache.** Editing the cache is usually the move *after* a dev-install loop silently failed, so the prohibition needs the working recipe beside it:
+
+- **Fastest: load the checkout directly.** `claude --plugin-dir <checkout>` (works with `-p` for a headless probe) runs the plugin's hooks and skills straight from the source tree, with nothing copied. Or run the plugin's script or hook by hand from the checkout: same code, no install at all.
+- **The local-marketplace trap.** A marketplace entry with a relative-path source is **copied** into the version-keyed cache, not linked, so later source edits do not appear in the installed copy. `marketplace update` and `plugin update` both exit 0 and copy nothing, because `plugin update` compares **versions** ("already at the latest version"). Bump the dev version for every round you need installed, then `marketplace update` + `plugin update`.
+- A `mode: "link"` command source would load in place, but it cannot be accepted from inside a session (a human must approve it in a real terminal), so do not plan an agent loop around it. Remove a dev marketplace when done, or it can shadow the real one.
+- **Verify through an observable change in the installed path**, never by an exit code: every step above "succeeds" while testing the old code.
+
+**Is the file you are fixing generated?** A config edited by hand verifies fine and then vanishes the next time its generator runs, with no error. The tells: it lives under `$TMPDIR`, a cache or a runtime directory; its name embeds a port, pid or timestamp; it is gitignored. Find the writer (`grep -rln '<a distinctive key from the file>'` over the repo's code), patch the generator, and add the assertion to the generator's tests, mutation-checked. A plan that says "fix applied" while pointing at a generated path is stale by construction: point it at the generator and its test.
+
 ## Keep history honest: branch, stage by path, never rewrite
 
 The same discoverability test applies to version control, where the "native UI" is the history itself.

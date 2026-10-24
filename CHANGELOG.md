@@ -3,6 +3,17 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [1.7.3] — 2026-10-24
+
+### Added — the recipes beside the "edit the source" rule
+
+"Edit the source, not the derived copy" now carries the two recipes whose absence is what sends sessions
+into the cache: how to test a plugin change without touching it (`claude --plugin-dir <checkout>`; the
+local-marketplace trap where a relative-path source is COPIED and `plugin update` exits 0 copying nothing
+until the version is bumped; verify through an observable change), and how to tell that a file is
+GENERATED (under `$TMPDIR` / a cache, port or pid in its name, gitignored) so the fix goes into the writer
+and its test. Moved here from the author's notes. No behaviour change.
+
 ## [1.7.2] — 2026-10-14
 
 ### Changed — an exception to the immutable-tag rule: a tag on a BROKEN release moves
