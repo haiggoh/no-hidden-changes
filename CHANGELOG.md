@@ -3,6 +3,17 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [1.7.4] — 2026-10-26
+
+### Added — the split test beside "Work on a feature branch"
+
+- The branch-per-topic rule now states the DECISION PROCEDURE for where one topic ends and
+  the next begins: if one set of changes were rejected, should the other still be mergeable?
+  Yes ⇒ separate work, separate branches. And a tree already holding mixed work stays on a
+  named checkpoint branch (never the default) until the reconstruction into topics is
+  verified, so nothing is stranded mid-split. (Batch C of the 2026-10-25 playbook plan —
+  skill-body addition only.)
+
 ## [1.7.3] — 2026-10-24
 
 ### Added — the recipes beside the "edit the source" rule

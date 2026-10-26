@@ -80,7 +80,7 @@ A corollary for a **stale installed copy**: if the repo says 1.5.0 and the insta
 
 The same discoverability test applies to version control, where the "native UI" is the history itself.
 
-**Work on a feature branch.** Accumulating several unrelated changes in the working tree and committing them to the default branch as one lump hides each change inside the others: nothing can be reviewed, reverted, or understood on its own. Branch per topic, commit in coherent units, and say WHY in the message.
+**Work on a feature branch.** Accumulating several unrelated changes in the working tree and committing them to the default branch as one lump hides each change inside the others: nothing can be reviewed, reverted, or understood on its own. Branch per topic, commit in coherent units, and say WHY in the message. The **split test** decides where one topic ends and the next begins: if one set of changes were rejected, should the other still be mergeable? Yes ⇒ they are separate work — separate branches. When a tree already holds mixed work, keep it on a named checkpoint branch (never the default) until the reconstruction into topics is verified, so nothing is stranded mid-split.
 
 **Use a worktree when the checkout is shared.** If a repo's working tree is reached through symlinks, a plugin cache, or a launcher that resolves a fixed path, then its checked-out branch is **global state** — it decides which code the user actually runs. Switching it silently swaps their tooling, and nothing errors. Use `git worktree add ../<repo>-<topic> -b <topic>` instead, leave the shared checkout on its default branch, and put it back if a switch was unavoidable.
 
