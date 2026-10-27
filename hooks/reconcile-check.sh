@@ -12,6 +12,17 @@
 # (see the skill) only AFTER the pass completes or is dismissed, so an un-acted
 # pass simply re-offers next session and cannot be silently lost.
 #
+# v2.0.0 re-arm contract — the reconciliation is GLOBAL and epoch-gated. It
+# re-arms ONLY when the triage epoch advances (a semantic change to the rule),
+# when no valid marker exists (first run per machine, corruption), or on a
+# different machine. It deliberately does NOT re-arm on: a new project (no
+# per-project pass exists), new scripts/automation (the v1.x surfaces
+# fingerprint hashed ~/.claude/scripts — a workspace sessions write into
+# near-daily — and re-armed the banner almost every day), or a hostname change
+# (the marker key no longer derives from the network-dependent hostname).
+# Ongoing automation coverage is the document-at-install duty in the skill, not
+# a hook-side change detector.
+#
 # Pure bash (3.2-compatible); no jq/python dependency at runtime.
 #
 # Cross-plugin ordering: this hook is meant to be the FIRST SessionStart banner to
@@ -23,6 +34,37 @@
 # written, which never blocks this hook's own output.
 
 set -uo pipefail
+
+# This is a SessionStart hook: the harness invokes it with a JSON payload on stdin
+# and no arguments. --help is still supported so a human probing it gets a usage
+# line instead of JSON spew — and never an unintended run (parsing happens before
+# any work, per the repo's scripts-support-help rule).
+usage() {
+  cat <<'USAGE'
+no-hidden-changes reconcile-check — SessionStart hook.
+
+Runs at session start; decides whether the one-time reconciliation (rule triage +
+read-only automation census) should be offered, and emits ONE JSON object on stdout
+for the harness. It never writes any marker itself — the model writes markers only
+after the pass completes (see skills/no-hidden-changes/SKILL.md).
+
+Usage: reconcile-check.sh [--help]
+
+Arguments:
+  --help, -h   Show this help and exit.
+
+Environment variables:
+  NHC_EMIT_HOST_KEY=1   Print the machine + legacy marker keys and exit (test seam).
+
+Input: one JSON object on stdin (the harness's SessionStart payload); a missing or
+never-EOF payload degrades gracefully.
+USAGE
+}
+case "${1-}" in
+  -h|--help) usage; exit 0 ;;
+  "") : ;;
+  *) printf 'reconcile-check.sh: unknown argument: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
+esac
 
 # Read the hook's stdin JSON once, defensively, and with a BOUND.
 #
@@ -55,7 +97,7 @@ _banner_flag_dir() {
 _signal_done() {
   [ -n "$SESSION_ID" ] || return 0
   local dir; dir="$(_banner_flag_dir)"
-  mkdir -p -m 700 "$dir" 2>/dev/null || return 0
+  mkdir -p "$dir" 2>/dev/null && chmod 700 "$dir" 2>/dev/null || return 0
   local path="$dir/${SESSION_ID}.no-hidden-changes.done"
   local tmp="${path}.tmp.$$"
   printf 'producer=no-hidden-changes\n' > "$tmp" 2>/dev/null && mv -f "$tmp" "$path" 2>/dev/null
@@ -72,19 +114,32 @@ RECON_RULES_VERSION='2'   # 1->2: the first-run pass now ALSO runs a read-only
                           # automation census, so a formerly-clean triage can newly
                           # find undocumented (or stale-documented) automation.
 DIR="$HOME/.claude/.no-hidden-changes"
-# Global reconciliation is per-HOST. A synced/migrated ~/.claude (dotfiles, Migration
-# Assistant, corp-managed home) must NOT carry machine A's "already reconciled" marker
-# to machine B — whose crontab and launch agents are its own, unseen automation. Keying
-# the global marker by host makes the one-time census run once PER MACHINE, not once ever.
-HOST_KEY="$(printf '%s' "$(hostname 2>/dev/null || uname -n)" | cksum | tr -d ' ')"
-GLOBAL="$DIR/global-reconciled-${HOST_KEY}"
-SURFACES="$DIR/surfaces-${HOST_KEY}"
-PROJ_KEY="$(printf '%s' "${PWD:-unknown}" | cksum | tr -d ' ')"
-PROJ="$DIR/proj_${PROJ_KEY}"
 
-# Snooze marker files (deferred state - distinct from reconciled)
+# Machine identity for the global marker. v1.x keyed this on $(hostname), which on
+# macOS is network-dependent — a DHCP search domain attaches and detaches as the
+# machine moves between networks — so every hostname flap re-armed the banner as a
+# "first session on this machine" (measured: two host-key generations born three
+# hours apart). IOPlatformUUID is stable across networks, reboots and OS updates.
+# hostname remains only as (a) the fallback where ioreg is unavailable (non-macOS)
+# and (b) the LEGACY marker key still accepted when the machine-keyed marker is
+# absent, so a 1.x install that already reconciled does not re-arm on upgrade.
+_machine_uuid() {
+  ioreg -rd1 -c IOPlatformExpertDevice 2>/dev/null \
+    | sed -n 's/.*"IOPlatformUUID"[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -1 || true
+}
+MACHINE_ID="$(_machine_uuid)"
+[ -n "$MACHINE_ID" ] || MACHINE_ID="$(hostname 2>/dev/null || uname -n)"
+HOST_KEY="$(printf '%s' "$MACHINE_ID" | cksum | tr -d ' ')"
+LEGACY_HOST_KEY="$(printf '%s' "$(hostname 2>/dev/null || uname -n)" | cksum | tr -d ' ')"
+GLOBAL="$DIR/global-reconciled-${HOST_KEY}"
+GLOBAL_LEGACY="$DIR/global-reconciled-${LEGACY_HOST_KEY}"
 GLOBAL_SNOOZE="$DIR/global-snoozed-${HOST_KEY}"
-PROJ_SNOOZE="$DIR/proj_snoozed_${PROJ_KEY}"
+
+# Documented test seam: print the machine + legacy marker keys and exit
+# (used by tests/test_hook.sh — deriving the keys anywhere else is the drift
+# this seam exists to kill).
+[ "${NHC_EMIT_HOST_KEY:-0}" = "1" ] && { printf 'machine %s\nlegacy %s\n' "$HOST_KEY" "$LEGACY_HOST_KEY"; exit 0; }
 
 # --- pure-bash JSON string escaper (bash 3.2 verified) ---
 json_escape() {
@@ -110,101 +165,43 @@ stamped_current() {
   [ "$v" -ge "$RECON_RULES_VERSION" ] 2>/dev/null
 }
 
-# Check if snoozed and still valid (epoch unchanged AND surfaces unchanged for global)
+# A snooze is valid while its stamped epoch equals the current one. (The pre-2.0
+# three-field format epoch|surfaces|date still parses: the surfaces field is
+# simply ignored — v2 removed the automation-set change detector, so nothing may
+# expire a snooze except the epoch.) It is only consulted when no reconciled
+# marker qualifies: a completed pass outranks a deferred one.
 snoozed_valid() {
   local snooze_file="$1"
   [ -f "$snooze_file" ] || return 1
   local content; content="$(cat "$snooze_file" 2>/dev/null)"
   [ -n "$content" ] || return 1
-
-  # Parse snooze file: epoch|surfaces_fingerprint|date
   local snooze_epoch; snooze_epoch="$(printf '%s' "$content" | cut -d'|' -f1)"
-  local snooze_surfaces; snooze_surfaces="$(printf '%s' "$content" | cut -d'|' -f2)"
-
-  # Valid if epoch matches AND surfaces match (for global) or just epoch matches (for project)
-  if [ "$snooze_epoch" = "$RECON_RULES_VERSION" ]; then
-    if [ "$2" = "global" ] && [ "$snooze_surfaces" = "$CUR_SURFACES" ]; then
-      return 0
-    elif [ "$2" = "project" ]; then
-      return 0
-    fi
-  fi
-  return 1
+  [ "$snooze_epoch" = "$RECON_RULES_VERSION" ]
 }
-
-# --- automation surfaces fingerprint (cheap change-detector for the census) ---
-# Hash the SET of STABLE, user-controllable automation surfaces — NOT their volatile
-# runtime state. A change here (a new cron line, launch agent, hook, or script) re-arms
-# the one-time census, so automation added AFTER first run — by hand, by another tool,
-# or while this plugin was disabled — is still caught. Deliberately EXCLUDES
-# `launchctl list` (churns with PIDs/transient jobs -> false re-arms) and system dirs;
-# the model's census still reads those live, they just must not drive this check.
-surfaces_fingerprint() {
-  # Sorted before hashing: settings.json/settings.local.json get rewritten whenever any
-  # hook is installed/edited (by this or any other tool), and a rewrite can reorder existing
-  # "command" entries (JSON key/array order isn't guaranteed stable across writers) without
-  # changing the actual SET of automation. Hashing the raw (unsorted) stream turned every
-  # such reorder into a false re-arm — the census kept "changing" every session even though
-  # nothing about installed automation had. Sorting makes the fingerprint depend only on the
-  # set of lines, not their order.
-  {
-    crontab -l 2>/dev/null
-    ls -1 "$HOME/Library/LaunchAgents" 2>/dev/null
-    ls -1 "$HOME/.claude/scripts" 2>/dev/null
-    grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.json"       2>/dev/null
-    grep -o '"command"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.claude/settings.local.json" 2>/dev/null
-  } 2>/dev/null | sort | cksum | tr -d ' '
-}
-
-# Documented test seam: print the fingerprint and exit (used by tests/test_hook.sh).
-[ "${NHC_EMIT_SURFACES:-0}" = "1" ] && { surfaces_fingerprint; exit 0; }
-
-# Has the installed-automation set changed since the last census? (Absent baseline
-# never re-arms on its own — the first global pass seeds it.)
-CUR_SURFACES="$(surfaces_fingerprint)"
-surfaces_changed=0
-if [ -f "$SURFACES" ]; then
-  prev="$(cat "$SURFACES" 2>/dev/null)"
-  [ -n "$prev" ] && [ "$prev" != "$CUR_SURFACES" ] && surfaces_changed=1
-fi
 
 NUDGE="no-hidden-changes: before any change that disables, hides, parks, removes, or relocates state or config — or reaches for a custom side-channel instead of a native toggle or menu — STOP and consult the no-hidden-changes skill first. Treat a tool no longer showing something in its own UI (or continuing to hide something that has become valid) as a red flag, not a detail. Three shapes of this are easy to commit by reflex, so check them BEFORE you start editing rather than at commit time: (1) EDIT THE SOURCE, NOT A DERIVED COPY — an installed plugin cache (~/.claude/plugins/cache/...), a symlinked live file, or a generated config is overwritten by the next update with no error and no version change, so the fix silently reverts and cannot ship; find the source repo and change that. Note the installed copy may also be OLDER than the repo, so confirm which one your change must reach. (2) BRANCH, and stage BY PATH — do not accumulate unrelated edits and land them on the default branch as one lump, and never \`git add -A\`, which stages the user's unsaved work too; and an ignore rule by EXACT NAME protects only the file it names, so run \`git check-ignore -v <path>\` before the FIRST commit of any new private file (no output is the warning), and widen the pattern rather than adding names one at a time; if a checkout is reached through symlinks or a launcher, its branch is global state, so use a worktree instead of switching it. (3) NEVER force-push or move a published tag unasked — fix forward as the next version; a rewrite does not even remove a leaked secret."
 
 # Shared triage-first reconciliation instructions (brevity-capped).
 COMMON="Follow the skill's \"Reconcile with the user's existing guidance\" section, TRIAGE-FIRST: silently compare the readable guidance (global MEMORY.md + memory dir, CLAUDE.md/AGENTS.md) to the rule BEFORE saying anything. If nothing conflicts or duplicates, write the marker(s) and reply with ONE short line led by 🟢 (e.g. '🟢 Checked your existing setup — zero conflicts, nothing to reconcile.'), then proceed to the user's actual request; do NOT explain the feature at length. If you DO find something, lead with one 🟡 line ('🟡 Found N item(s) worth reconciling — below.'), then surface concisely: quote existing text verbatim, frame NEUTRALLY (both possibly-intentional, no 'old is wrong' framing), DEFAULT TO KEEPING it, make ONE informed batch offer (never blind 'apply all'); only in this path add a short note that claude.ai/Desktop custom instructions could not be read. Persist per the skill: personal auto-memory / uncommitted CLAUDE.md edited in place after confirmation; committed CLAUDE.md and AGENTS.md offered as a diff; record declines as durable notes. Keep total output brief and non-lecturing."
 
-GLOBAL_PROMPT="[no-hidden-changes first-run reconciliation — non-blocking; do it around the user's request, don't derail an urgent task] First session since install on THIS machine (or the set of installed automation changed, or a newer reconciliation version). Do a ONE-TIME triage over the global guidance AND this project. ${COMMON} ALSO run a ONE-TIME, READ-ONLY AUTOMATION CENSUS: enumerate installed automation — Claude Code hooks (~/.claude/settings.json + settings.local.json, and any project .claude/settings.json), the user crontab (crontab -l), launchd agents (~/Library/LaunchAgents + launchctl list), scripts in ~/.claude/scripts, and session crons (CronList) — and cross-check each against your discoverable records (global MEMORY.md + memory dir, CLAUDE.md/AGENTS.md). A finding is EITHER an active automation with NO discoverable record (offer to write a documenting memory/record naming the mechanism, its trigger, and where it lives) OR a record describing automation that no longer exists (offer to correct or remove it). EXCLUDE this plugin's own reconcile-check hook and OS/vendor-managed entries (e.g. Homebrew/Adobe launch agents). Fold census findings into the SAME 🟢/🟡 single batch as the guidance triage — same DEFAULT-KEEP, per-item, confirm-before-writing rules; never write silently. ONLY after the pass completes or the user dismisses it, create dir \"${DIR}\" and write \"${RECON_RULES_VERSION}\" into BOTH \"${GLOBAL}\" and \"${PROJ}\", and write \"${CUR_SURFACES}\" into \"${SURFACES}\". Do not create them beforehand."
-
-PROJ_PROMPT="[no-hidden-changes reconciliation for THIS project — non-blocking] First session for the plugin in this project. Triage this project's CLAUDE.md/AGENTS.md/local guidance against the rule. ${COMMON} ONLY after the pass completes or is dismissed, write \"${RECON_RULES_VERSION}\" into \"${PROJ}\" (create dir \"${DIR}\" first). Do not create it beforehand."
+GLOBAL_PROMPT="[no-hidden-changes first-run reconciliation — non-blocking; do it around the user's request, don't derail an urgent task] First session since install on THIS machine, or a newer reconciliation version. Do a ONE-TIME triage over the global guidance AND this project. ${COMMON} ALSO run a ONE-TIME, READ-ONLY AUTOMATION CENSUS: enumerate installed automation — Claude Code hooks (~/.claude/settings.json + settings.local.json, and any project .claude/settings.json), the user crontab (crontab -l), launchd agents (~/Library/LaunchAgents + launchctl list), scripts in ~/.claude/scripts, and session crons (CronList) — and cross-check each against your discoverable records (global MEMORY.md + memory dir, CLAUDE.md/AGENTS.md). A finding is EITHER an active automation with NO discoverable record (offer to write a documenting memory/record naming the mechanism, its trigger, and where it lives) OR a record describing automation that no longer exists (offer to correct or remove it). EXCLUDE this plugin's own reconcile-check hook and OS/vendor-managed entries (e.g. Homebrew/Adobe launch agents). Fold census findings into the SAME 🟢/🟡 single batch as the guidance triage — same DEFAULT-KEEP, per-item, confirm-before-writing rules; never write silently. ONLY after the pass completes or the user dismisses it, create dir \"${DIR}\" and write \"${RECON_RULES_VERSION}\" into \"${GLOBAL}\". Do not create it beforehand."
 
 GLOBAL_BANNER="👋 no-hidden-changes active — on your first message I'll do a one-time check of this rule against your existing setup, plus a quick read-only inventory of installed automation (hooks, cron, launch agents, scripts), and flag anything that conflicts or looks undocumented. Nothing changes without your OK."
-GLOBAL_BANNER_SNOOZED="👋 no-hidden-changes: census deferred since $(date '+%Y-%m-%d') — new automation detected, reconciliation available on request."
+GLOBAL_BANNER_SNOOZED="👋 no-hidden-changes: reconciliation deferred since $(date '+%Y-%m-%d') — available on request."
 
-PROJ_BANNER="👋 no-hidden-changes: new project — on your first message I'll check this rule against this project's guidance. Nothing changes without your OK."
-PROJ_BANNER_SNOOZED="👋 no-hidden-changes: project reconciliation deferred since $(date '+%Y-%m-%d') — available on request."
-
-# Decide which (if any) first-run branch applies.
+# Decide whether the first-run branch applies. The ONLY re-arm triggers are:
+#   - no valid marker (first run per machine, corruption, garbage)
+#   - an advanced triage epoch (a semantic change to the rule)
+#   - a different machine (foreign-host markers never count)
+# Nothing else re-arms: not a new project, not new scripts, not a hostname change.
 context="$NUDGE"
 banner=""
-snoozed=0
-
-if ! stamped_current "$GLOBAL" || [ "$surfaces_changed" = "1" ]; then
-  if snoozed_valid "$GLOBAL_SNOOZE" "global"; then
-    context="${NUDGE}"
+if ! stamped_current "$GLOBAL" && ! stamped_current "$GLOBAL_LEGACY"; then
+  if snoozed_valid "$GLOBAL_SNOOZE"; then
     banner="$GLOBAL_BANNER_SNOOZED"
-    snoozed=1
   else
     context="${NUDGE}"$'\n\n'"${GLOBAL_PROMPT}"
     banner="$GLOBAL_BANNER"
-  fi
-elif ! stamped_current "$PROJ"; then
-  if snoozed_valid "$PROJ_SNOOZE" "project"; then
-    context="${NUDGE}"
-    banner="$PROJ_BANNER_SNOOZED"
-    snoozed=1
-  else
-    context="${NUDGE}"$'\n\n'"${PROJ_PROMPT}"
-    banner="$PROJ_BANNER"
   fi
 fi
 

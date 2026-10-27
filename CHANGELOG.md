@@ -3,6 +3,37 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [2.0.0] — 2026-10-27
+
+### Changed — the reconciliation re-arms only on a rule change (was: almost daily)
+
+Measured diagnosis of "the banner keeps coming back": three re-arm triggers were firing
+on ordinary work, none of them a semantic change to the rule. All removed; the triage is
+now global, once per machine, and re-arms ONLY when the triage epoch
+(`RECON_RULES_VERSION`) advances.
+
+- **The installed-automation surfaces fingerprint is gone** (the near-daily rearm).
+  It hashed `~/.claude/scripts` — a workspace that sessions write helper scripts into
+  almost every day (measured: six files changed in one day) — plus the `"command"`
+  entries of the settings files, and any change re-armed the global banner. Its own
+  comment claimed to hash "stable, user-controllable surfaces"; `~/.claude/scripts` is
+  a workspace, not a stable surface. The census still runs as part of every
+  epoch-triggered pass; ongoing coverage is the document-at-install duty.
+- **No per-project pass.** The `proj_<key>` marker, its prompt, banner and snooze are
+  removed — every new cwd used to get its own triage request. The global pass already
+  triages "the global guidance AND this project". Existing `proj_*` files on disk are
+  inert leftovers and are never read or written again.
+- **The marker key no longer derives from `$(hostname)`**, which on macOS is
+  network-dependent (DHCP search domains attach and detach; measured: two host-key
+  generations born three hours apart) — every hostname flap re-armed the banner as a
+  "first session on this machine". The key is now the stable IOPlatformUUID. The
+  legacy hostname-keyed marker is still ACCEPTED, so upgrading from 1.x does not
+  re-arm an already-reconciled install.
+- **The snooze is epoch-only** (and global-only): nothing expires it except the epoch.
+  The legacy three-field snooze format still parses.
+- The SessionStart prompt no longer instructs writing `proj_` / `surfaces` markers.
+- `reconcile-check.sh` now supports `--help` and rejects unknown arguments.
+
 ## [1.7.4] — 2026-10-26
 
 ### Added — the split test beside "Work on a feature branch"

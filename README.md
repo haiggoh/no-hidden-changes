@@ -76,7 +76,7 @@ does the job (a duplicate hides from every native view), and once you install on
 record it somewhere discoverable (undocumented automation is invisible automation).
 
 **First-run reconciliation (Claude Code):** the first session after you install — once
-**per machine** — and once per new project, the plugin does a one-time check of this rule
+**per machine** — the plugin does a one-time check of this rule
 against your *existing* memories / `CLAUDE.md` / `AGENTS.md`, plus a one-time, read-only
 **automation census** of what's already installed (Claude Code hooks, `crontab`, launch
 agents, `~/.claude/scripts`, session crons).
@@ -95,17 +95,18 @@ What you'll see:
   are offered as diffs.
 
 Why *per machine*: the reconciliation marker lives in `~/.claude`, which many people sync
-across machines — so it's keyed by host, ensuring the census actually runs on each machine
-whose crontab/launch agents are its own. After the first pass, the census re-runs only when
-the **set of installed automation changes** (a new cron, hook, agent, or script) — it is
-change-triggered, not a recurring scan. One honestly-accepted gap: automation hand-installed
-outside Claude on a machine you never open a new session on again won't be re-caught; ongoing
-coverage is the *document-at-install* habit the rule asks for.
+across machines — so it's keyed by a stable machine identity, ensuring the census actually
+runs on each machine whose crontab/launch agents are its own. After the first pass the
+census does **not** re-run on its own. (v1.x re-armed it whenever the "set of installed
+automation changed", via a fingerprint that hashed `~/.claude/scripts` — a workspace
+sessions write helper scripts into near-daily — which re-armed the banner almost every
+day; removed in 2.0.0.) Ongoing coverage is the *document-at-install* habit the rule asks
+for; ask for a fresh census explicitly whenever you want one.
 
 **Deferred reconciliation (v1.7.1+):** if you're not ready to run the pass, dismiss the offer and
-it enters a "snoozed" state — a quiet banner ("census deferred since <date>") replaces the full
+it enters a "snoozed" state — a quiet banner ("reconciliation deferred since <date>") replaces the full
 prompt, so the deferral is **visible, never hidden**. The pass re-arms only when the rule epoch
-advances or (globally) the automation set changes, never silently.
+advances, never silently.
 
 **What it cannot see:** the reconciliation reads your Claude Code memories / `CLAUDE.md` /
 `AGENTS.md`, but it **cannot** read your claude.ai / Claude Desktop **Custom Instructions** —

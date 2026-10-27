@@ -1,30 +1,56 @@
 #!/usr/bin/env bash
 # Framework-free tests for reconcile-check.sh. Requires bash + jq (test-only).
+#
+# v2.0.0 contract: the reconciliation re-arms ONLY on a triage-epoch advance (or a
+# missing / garbage / foreign-host marker). Specifically:
+#   - NO per-project trigger: a stamped global marker is steady state in EVERY cwd.
+#   - NO installed-automation surfaces fingerprint: churn in ~/.claude/scripts,
+#     settings files, crontab or LaunchAgents never re-arms anything (v1.x hashed
+#     ~/.claude/scripts — a workspace sessions write into near-daily — and re-armed
+#     the banner almost every day).
+#   - The global marker is keyed by a STABLE machine identity (IOPlatformUUID), not
+#     by hostname (which flaps with the network — measured: two host-key generations
+#     born 3 hours apart). The pre-2.0 hostname-keyed marker is still ACCEPTED, so
+#     upgrading does not re-arm existing installs.
+#   - The snooze is global-only and its validity is epoch-only.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/../hooks/reconcile-check.sh"
 # Read the triage epoch the hook currently gates on, so the test tracks it.
 RECON_RULES_VERSION="$(sed -nE "s/^RECON_RULES_VERSION='([^']*)'.*/\1/p" "$HOOK" | head -1)"
-# Global + surfaces markers are keyed by host (mirrors the hook). Derive the same key.
-HOST_KEY="$(printf '%s' "$(hostname 2>/dev/null || uname -n)" | cksum | tr -d ' ')"
-GMARK="global-reconciled-${HOST_KEY}"
-SMARK="surfaces-${HOST_KEY}"
-# Snooze markers (new deferred state)
-GLOBAL_SNOOZE_MARK="global-snoozed-${HOST_KEY}"
 
 pass=0; fail=0
 check() { if [ "$1" -eq 0 ]; then echo "  PASS: $2"; pass=$((pass+1)); else echo "  FAIL: $2"; fail=$((fail+1)); fi; }
 sysmsg() { jq -r '.systemMessage // ""' "$1"; }
 ctx()    { jq -r '.hookSpecificOutput.additionalContext' "$1"; }
 # </dev/null on both: these cases exercise the hook's reconcile LOGIC, not its stdin
-# handling, so they must not inherit the caller's fd0. Two reasons. The hook reads stdin
-# when fd0 is not a terminal, so inheriting it (a) makes every case pay the read's
-# timeout when the caller holds stdin open, and (b) lets the hook CONSUME the caller's
-# own input — if the caller is a shell reading its script from stdin, that swallows the
-# rest of the script. Case I is the one place stdin shape is deliberately the subject.
+# handling, so they must not inherit the caller's fd0 (see Case Z for the one case
+# where stdin shape IS the subject).
 run()    { ( cd "$2" && HOME="$1" bash "$HOOK" </dev/null ); }   # run <home> <cwd>
-fp()     { NHC_EMIT_SURFACES=1 HOME="$1" bash "$HOOK" </dev/null; }  # surfaces fingerprint for a HOME
+
+# Marker keys come from the hook's own documented seam, never re-derived here.
+# Re-deriving the machine identity in the test is exactly the hostname/UUID drift
+# the seam exists to kill.
+hostkeys() { NHC_EMIT_HOST_KEY=1 HOME="$1" bash "$HOOK" </dev/null; }
+mkey() { hostkeys "$1" | sed -n 's/^machine //p'; }
+lkey() { hostkeys "$1" | sed -n 's/^legacy //p'; }
+gmark() { printf 'global-reconciled-%s' "$(mkey "$1")"; }
+lmark() { printf 'global-reconciled-%s' "$(lkey "$1")"; }
+
+# A populated scripts workspace. Sessions drop helper scripts here CONSTANTLY
+# (measured: six files changed in one day on the author's machine), which is what
+# made the v1.x fingerprint re-arm the banner near-daily. Every steady-state case
+# below runs WITH this dir present, so the suite catches any reintroduction of a
+# scripts-sensitive check — not just an exact replay of the old fingerprint.
+seed_scripts_workspace() {
+  mkdir -p "$1/.claude/scripts"
+  printf '#!/bin/sh\n' > "$1/.claude/scripts/helper-one.sh"
+}
+# Add churn AFTER a baseline was stamped — the realistic re-arm shape.
+churn_scripts_workspace() {
+  printf '#!/bin/sh\n' > "$1/.claude/scripts/helper-two.sh"
+}
 
 command -v jq >/dev/null 2>&1 || { echo "jq required for tests"; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
@@ -32,53 +58,57 @@ CWD="$TMP/proj"; mkdir -p "$CWD"
 
 echo "== Case A: no markers (global first-run) =="
 HA="$TMP/home_a"; mkdir -p "$HA"
+seed_scripts_workspace "$HA"
 OUT="$TMP/a.json"; run "$HA" "$CWD" > "$OUT"
 jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON"
-[ -n "$(sysmsg "$OUT")" ]; check $? "systemMessage present"
+[ -n "$(sysmsg "$OUT")" ]; r=$?; check $r "systemMessage present"
 case "$(sysmsg "$OUT")" in *"active"*) r=0;; *) r=1;; esac; check $r "global banner wording"
 case "$(sysmsg "$OUT")" in *"inventory of installed automation"*) r=0;; *) r=1;; esac; check $r "banner mentions automation inventory"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "reconciliation prompt present"
 case "$(ctx "$OUT")" in *"TRIAGE-FIRST"*) r=0;; *) r=1;; esac; check $r "triage-first instruction present"
 case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=0;; *) r=1;; esac; check $r "census present in global prompt"
 
-echo "== Case B: global done, project not (per-project first-run) =="
-HB="$TMP/home_b"; mkdir -p "$HB/.claude/.no-hidden-changes"
-printf '%s' "$RECON_RULES_VERSION" > "$HB/.claude/.no-hidden-changes/$GMARK"
+echo "== Case B: global stamped, scripts dir populated, ANY cwd -> steady state (no per-project trigger) =="
+HB="$TMP/home_b"; DB="$HB/.claude/.no-hidden-changes"; mkdir -p "$DB"
+seed_scripts_workspace "$HB"
+printf '%s' "$RECON_RULES_VERSION" > "$DB/$(gmark "$HB")"
 OUT="$TMP/b.json"; run "$HB" "$CWD" > "$OUT"
 jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON"
-case "$(sysmsg "$OUT")" in *"new project"*) r=0;; *) r=1;; esac; check $r "project banner wording"
-case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=1;; *) r=0;; esac; check $r "census ABSENT in per-project prompt (global-only)"
-
-echo "== Case C: both markers present (steady state) =="
-HC="$TMP/home_c"; DC="$HC/.claude/.no-hidden-changes"; mkdir -p "$DC"
-printf '%s' "$RECON_RULES_VERSION" > "$DC/$GMARK"
-# Derive the key exactly as the hook does, from the same cwd (avoids symlink drift).
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-printf '%s' "$RECON_RULES_VERSION" > "$DC/proj_${KEY}"
-OUT="$TMP/c.json"; run "$HC" "$CWD" > "$OUT"
-jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON"
-[ -z "$(sysmsg "$OUT")" ]; check $? "no systemMessage in steady state"
+[ -z "$(sysmsg "$OUT")" ]; r=$?; check $r "no systemMessage: a stamped global marker is steady state in every project"
 case "$(ctx "$OUT")" in *"before any change that disables"*) r=0;; *) r=1;; esac; check $r "nudge present"
 case "$(ctx "$OUT")" in *reconciliation*) r=1;; *) r=0;; esac; check $r "no reconciliation prompt in steady state"
+case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=1;; *) r=0;; esac; check $r "census absent in steady state"
 
-echo "== Case D: legacy dotted markers (pre-epoch) now RE-ARM (epoch advanced 1->$RECON_RULES_VERSION) =="
+echo "== Case C: surfaces baseline present + scripts churned -> STILL steady state =="
+# The exact v1.x state that re-armed the banner near-daily: a stored surfaces
+# baseline that no longer matches the live scripts dir. v2 must ignore the file.
+HC="$TMP/home_c"; DC="$HC/.claude/.no-hidden-changes"; mkdir -p "$DC"
+seed_scripts_workspace "$HC"
+printf '%s' "$RECON_RULES_VERSION" > "$DC/$(gmark "$HC")"
+printf '%s' "$RECON_RULES_VERSION" > "$DC/$(lmark "$HC")"   # stamped under both key schemes
+printf '%s' "0" > "$DC/surfaces-$(lkey "$HC")"              # stale baseline under the legacy key name
+printf '%s' "0" > "$DC/surfaces-$(mkey "$HC")"              # ...and under the machine key name
+churn_scripts_workspace "$HC"
+OUT="$TMP/c.json"; run "$HC" "$CWD" > "$OUT"
+[ -z "$(sysmsg "$OUT")" ]; r=$?; check $r "stale surfaces baseline + churn does not re-arm"
+case "$(ctx "$OUT")" in *reconciliation*) r=1;; *) r=0;; esac; check $r "no reconciliation prompt despite surfaces churn"
+
+echo "== Case D: legacy dotted markers (pre-epoch) re-arm (epoch advanced) =="
 HD="$TMP/home_d"; DD="$HD/.claude/.no-hidden-changes"; mkdir -p "$DD"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-printf '%s' "1.3.0" > "$DD/$GMARK"     # old semver stamp -> epoch 1, now < current
-printf '%s' "1.3.0" > "$DD/proj_${KEY}"
+printf '%s' "1.3.0" > "$DD/$(gmark "$HD")"     # old semver stamp -> epoch 1, now < current
 OUT="$TMP/d.json"; run "$HD" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "legacy dotted marker re-arms (epoch advanced)"
 case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=0;; *) r=1;; esac; check $r "re-armed pass carries the census"
 
 echo "== Case E: stale epoch (below current) re-arms =="
 HE="$TMP/home_e"; DE="$HE/.claude/.no-hidden-changes"; mkdir -p "$DE"
-printf '%s' "0" > "$DE/$GMARK"          # epoch 0 < current -> re-arm
+printf '%s' "0" > "$DE/$(gmark "$HE")"          # epoch 0 < current -> re-arm
 OUT="$TMP/e.json"; run "$HE" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "stale epoch re-arms reconciliation"
 
 echo "== Case F: non-numeric / garbage marker re-arms (fails safe) =="
 HF="$TMP/home_f"; DF="$HF/.claude/.no-hidden-changes"; mkdir -p "$DF"
-printf '%s' "notanumber" > "$DF/$GMARK"
+printf '%s' "notanumber" > "$DF/$(gmark "$HF")"
 OUT="$TMP/f.json"; run "$HF" "$CWD" > "$OUT"
 jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON despite garbage marker"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "garbage marker re-arms (fails safe)"
@@ -86,90 +116,75 @@ case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check
 echo "== Case G: per-host — a synced marker for a DIFFERENT host does not count =="
 HG="$TMP/home_g"; DG="$HG/.claude/.no-hidden-changes"; mkdir -p "$DG"
 printf '%s' "$RECON_RULES_VERSION" > "$DG/global-reconciled-99999999"   # another machine's marker
-# current host's marker is absent -> must re-arm (census must run on THIS machine)
+# current machine's marker is absent -> must re-arm (census must run on THIS machine)
 OUT="$TMP/g.json"; run "$HG" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "foreign-host marker ignored, census re-arms on this host"
 
-echo "== Case H: surfaces-hash backstop (change-triggered re-arm) =="
+echo "== Case H: pre-2.0 hostname-keyed marker is ACCEPTED (upgrade must not re-arm) =="
 HH="$TMP/home_h"; DH="$HH/.claude/.no-hidden-changes"; mkdir -p "$DH"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-printf '%s' "$RECON_RULES_VERSION" > "$DH/$GMARK"
-printf '%s' "$RECON_RULES_VERSION" > "$DH/proj_${KEY}"
-# H1: surfaces baseline matches current fingerprint -> no re-arm
-printf '%s' "$(fp "$HH")" > "$DH/$SMARK"
-OUT="$TMP/h1.json"; run "$HH" "$CWD" > "$OUT"
-case "$(ctx "$OUT")" in *reconciliation*) r=1;; *) r=0;; esac; check $r "unchanged surfaces -> no re-arm"
-# H2: surfaces baseline differs -> re-arm with census
-printf '%s' "0" > "$DH/$SMARK"
-OUT="$TMP/h2.json"; run "$HH" "$CWD" > "$OUT"
-case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "changed surfaces re-arm reconciliation"
-case "$(ctx "$OUT")" in *"AUTOMATION CENSUS"*) r=0;; *) r=1;; esac; check $r "surface-change pass carries the census"
+seed_scripts_workspace "$HH"
+printf '%s' "$RECON_RULES_VERSION" > "$DH/$(lmark "$HH")"   # ONLY the legacy key
+OUT="$TMP/h.json"; run "$HH" "$CWD" > "$OUT"
+[ -z "$(sysmsg "$OUT")" ]; r=$?; check $r "legacy hostname-keyed marker accepted, no banner"
+case "$(ctx "$OUT")" in *reconciliation*) r=1;; *) r=0;; esac; check $r "no reconciliation prompt with legacy marker only"
 
-echo "== Case J: snoozed global (deferred) with matching epoch and surfaces =="
+echo "== Case I: marker keys are stable and distinct =="
+HI="$TMP/home_i"; mkdir -p "$HI"
+K1="$(mkey "$HI")"; K2="$(mkey "$HI")"; L1="$(lkey "$HI")"
+[ -n "$K1" ]; r=$?; check $r "machine key non-empty"
+[ "$K1" = "$K2" ]; r=$?; check $r "machine key stable across runs"
+[ -n "$L1" ]; r=$?; check $r "legacy key non-empty"
+
+echo "== Case J: snoozed global, epoch matches (new epoch|date format) -> deferred =="
 HJ="$TMP/home_j"; DJ="$HJ/.claude/.no-hidden-changes"; mkdir -p "$DJ"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-# Global NOT stamped (needs reconciliation), project stamped
-# This triggers the global branch where snooze is checked
-# Snooze with current epoch and matching surfaces fingerprint
-printf '%s|%s|2026-01-01' "$RECON_RULES_VERSION" "$(fp "$HJ")" > "$DJ/$GLOBAL_SNOOZE_MARK"
+seed_scripts_workspace "$HJ"
+printf '%s|%s' "$RECON_RULES_VERSION" "$(date +%Y-%m-%d)" > "$DJ/global-snoozed-$(mkey "$HJ")"
 OUT="$TMP/j.json"; run "$HJ" "$CWD" > "$OUT"
 jq . "$OUT" >/dev/null 2>&1; check $? "valid JSON"
 case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "snoozed banner says deferred"
-case "$(sysmsg "$OUT")" in *"census deferred"*) r=0;; *) r=1;; esac; check $r "snoozed banner mentions census deferred"
+case "$(sysmsg "$OUT")" in *"available on request"*) r=0;; *) r=1;; esac; check $r "snoozed banner offers on request"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=1;; *) r=0;; esac; check $r "NO reconciliation prompt when snoozed"
 
-echo "== Case K: snoozed global with stale epoch re-arms =="
+echo "== Case K: snoozed global SURVIVES scripts churn (epoch-only validity) =="
 HK="$TMP/home_k"; DK="$HK/.claude/.no-hidden-changes"; mkdir -p "$DK"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-# Global NOT stamped, project stamped
-# Snooze with OLD epoch (1) - should re-arm
-OLD_EPOCH=1
-printf '%s|%s|2026-01-01' "$OLD_EPOCH" "$(fp "$HK")" > "$DK/$GLOBAL_SNOOZE_MARK"
+seed_scripts_workspace "$HK"
+printf '%s|%s' "$RECON_RULES_VERSION" "$(date +%Y-%m-%d)" > "$DK/global-snoozed-$(mkey "$HK")"
+churn_scripts_workspace "$HK"
 OUT="$TMP/k.json"; run "$HK" "$CWD" > "$OUT"
+case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "snooze survives automation churn (epoch-only)"
+case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=1;; *) r=0;; esac; check $r "NO reconciliation prompt after churn while snoozed"
+
+echo "== Case L: legacy 3-field snooze format (epoch|surfaces|date) still parses =="
+HL="$TMP/home_l"; DL="$HL/.claude/.no-hidden-changes"; mkdir -p "$DL"
+printf '%s|%s|2026-01-01' "$RECON_RULES_VERSION" "35951711312281" > "$DL/global-snoozed-$(mkey "$HL")"
+OUT="$TMP/l.json"; run "$HL" "$CWD" > "$OUT"
+case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "legacy snooze format still valid (epoch field honoured)"
+
+echo "== Case M: snoozed global with stale epoch re-arms =="
+HM="$TMP/home_m"; DM="$HM/.claude/.no-hidden-changes"; mkdir -p "$DM"
+printf '%s|%s' "1" "$(date +%Y-%m-%d)" > "$DM/global-snoozed-$(mkey "$HM")"
+OUT="$TMP/m.json"; run "$HM" "$CWD" > "$OUT"
 case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "snooze with stale epoch re-arms"
 
-echo "== Case L: snoozed global with changed surfaces re-arms =="
-HL="$TMP/home_l"; DL="$HL/.claude/.no-hidden-changes"; mkdir -p "$DL"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-# Global NOT stamped, project stamped
-# Snooze with current epoch but WRONG surfaces fingerprint
-printf '%s|%s|2026-01-01' "$RECON_RULES_VERSION" "99999999999999" > "$DL/$GLOBAL_SNOOZE_MARK"
-OUT="$TMP/l.json"; run "$HL" "$CWD" > "$OUT"
-case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=0;; *) r=1;; esac; check $r "snooze with changed surfaces re-arms"
-
-echo "== Case M: snoozed project (deferred) with matching epoch =="
-HM="$TMP/home_m"; DM="$HM/.claude/.no-hidden-changes"; mkdir -p "$DM"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-# Global stamped, project NOT stamped -> triggers project branch
-printf '%s' "$RECON_RULES_VERSION" > "$DM/$GMARK"
-# Snooze project with current epoch
-PROJ_SNOOZE_MARK="proj_snoozed_${KEY}"
-printf '%s|2026-01-01' "$RECON_RULES_VERSION" > "$DM/$PROJ_SNOOZE_MARK"
-OUT="$TMP/m.json"; run "$HM" "$CWD" > "$OUT"
-case "$(sysmsg "$OUT")" in *"deferred"*) r=0;; *) r=1;; esac; check $r "snoozed project banner says deferred"
-case "$(ctx "$OUT")" in *"first-run reconciliation"*) r=1;; *) r=0;; esac; check $r "NO project reconciliation prompt when snoozed"
-
-echo "== Case N: snoozed project with stale epoch re-arms =="
-HN="$TMP/home_n"; DN="$HN/.claude/.no-hidden-changes"; mkdir -p "$DN"
-KEY="$(cd "$CWD" && printf '%s' "$PWD" | cksum | tr -d ' ')"
-# Global stamped, project NOT stamped
-printf '%s' "$RECON_RULES_VERSION" > "$DN/$GMARK"
-PROJ_SNOOZE_MARK="proj_snoozed_${KEY}"
-# Snooze with OLD epoch (1) - should re-arm
-printf '%s|2026-01-01' "1" > "$DN/$PROJ_SNOOZE_MARK"
+echo "== Case N: prompt text contract — no per-project / surfaces marker writes, no automation-change trigger =="
+HN="$TMP/home_n"; mkdir -p "$HN"
 OUT="$TMP/n.json"; run "$HN" "$CWD" > "$OUT"
-case "$(ctx "$OUT")" in *"reconciliation for THIS project"*) r=0;; *) r=1;; esac; check $r "snoozed project with stale epoch re-arms"
+PROMPT="$(ctx "$OUT")"
+case "$PROMPT" in *"proj_"*) r=1;; *) r=0;; esac; check $r "prompt never instructs writing a proj_ marker"
+case "$PROMPT" in *"surfaces-"*) r=1;; *) r=0;; esac; check $r "prompt never instructs writing a surfaces marker"
+case "$PROMPT" in *"installed automation changed"*) r=1;; *) r=0;; esac; check $r "prompt no longer claims re-arm on automation change"
+case "$PROMPT" in *"First session since install on THIS machine, or a newer reconciliation version"*) r=0;; *) r=1;; esac; check $r "trigger text names machine + epoch only"
 
-echo "== Case I: stdin that never reaches EOF must not hang the hook =="
+echo "== Case Z: stdin that never reaches EOF must not hang the hook =="
 # A SessionStart hook runs before the session is usable, so an unbounded read is not a
 # slow test — it is a stalled startup. `[ ! -t 0 ]` does NOT distinguish "a pipe that
 # will reach EOF" from "a pipe/socket the caller holds open", so this case supplies the
 # second kind: a FIFO whose write end this shell keeps open, meaning EOF never arrives.
-HI="$TMP/home_i"; mkdir -p "$HI"
+HZ="$TMP/home_z"; mkdir -p "$HZ"
 FIFO="$TMP/never-eof"; mkfifo "$FIFO"
 exec 3<>"$FIFO"                     # read-write: a writer always exists, so no EOF, ever
-OUT="$TMP/i.json"
-( cd "$CWD" && HOME="$HI" bash "$HOOK" <&3 ) > "$OUT" 2>/dev/null &
+OUT="$TMP/z.json"
+( cd "$CWD" && HOME="$HZ" bash "$HOOK" <&3 ) > "$OUT" 2>/dev/null &
 HOOKPID=$!
 i=0
 while kill -0 "$HOOKPID" 2>/dev/null && [ "$i" -lt 30 ]; do sleep 0.1; i=$((i+1)); done

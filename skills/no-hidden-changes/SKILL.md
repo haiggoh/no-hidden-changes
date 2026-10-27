@@ -1,6 +1,6 @@
 ---
 name: no-hidden-changes
-description: 'Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool''s built-in toggle, menu, or setting. Also applies when a change keeps hiding state that has since become valid (stale state lies too), or ships an in-place edit to a versioned/published artifact (plugin, package, shared config) without bumping its version, or edits a DERIVED copy instead of its source (an installed plugin cache, a symlinked live file, a build output, a generated config) where the next update silently reverts it, or lands unrelated work as one lump on the default branch, switches the branch of a checkout other tooling resolves through, stages with `git add -A`, or rewrites published history (a force-push or a moved tag), or installs durable automation (a hook, cron job, launch agent, or background script) without first surveying for an existing mechanism that already does the job or recording what it installed. On first use after install (and once per new project), also reconcile this rule against the user''s existing memories / CLAUDE.md / AGENTS.md — and take a one-time inventory of installed automation — surfacing contradictions, duplicates, or undocumented automation before they operate unseen. The test: will a future user opening the tool''s own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don''t trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.'
+description: 'Use before adopting any change that disables, hides, parks, removes, or relocates something, or uses a custom side-channel (a `_disabled`/`_backup` key or shadow file) instead of a tool''s built-in toggle, menu, or setting. Also applies when a change keeps hiding state that has since become valid (stale state lies too), or ships an in-place edit to a versioned/published artifact (plugin, package, shared config) without bumping its version, or edits a DERIVED copy instead of its source (an installed plugin cache, a symlinked live file, a build output, a generated config) where the next update silently reverts it, or lands unrelated work as one lump on the default branch, switches the branch of a checkout other tooling resolves through, stages with `git add -A`, or rewrites published history (a force-push or a moved tag), or installs durable automation (a hook, cron job, launch agent, or background script) without first surveying for an existing mechanism that already does the job or recording what it installed. On first use after install (once per machine), also reconcile this rule against the user''s existing memories / CLAUDE.md / AGENTS.md — and take a one-time inventory of installed automation — surfacing contradictions, duplicates, or undocumented automation before they operate unseen. The test: will a future user opening the tool''s own native UI see accurate state, or will it look empty or broken? Prefer the native, visible path; if hidden state is unavoidable, flag it loudly. Don''t trigger on benign edits — typos, tests, cosmetic refactors, renames, or honest deletions where nothing is hidden.'
 ---
 
 # No Hidden Changes
@@ -129,7 +129,7 @@ Sometimes there is no native mechanism. Then treat invisibility as a real cost, 
 Almost everyone installs this rule *on top of* an existing setup. Old standing
 guidance can **contradict**, **duplicate**, or **overlap** it — and letting that
 sit unsurfaced is itself a hidden change. So on the first session after install
-(a SessionStart banner announces it), once per new project, and reactively when
+on a machine (a SessionStart banner announces it), and reactively when
 the rule is about to apply, reconcile it with the user's guidance — **triage
 first, and be brief.**
 
@@ -176,28 +176,26 @@ Review-then-approve, not blind-apply.
 and the reconciliation version. Write the version into the marker **only after
 the pass completes** — never before.
 
-**Deferred (snooze) state (v1.7.1+):** if the user is not ready to run the pass,
+**Deferred (snooze) state (v1.7.1+; epoch-only since 2.0.0):** if the user is not ready to run the pass,
 they may **dismiss** it. In that case, write a *snooze marker* instead of the
-completed marker — `global-snoozed-<host>` or `proj_snoozed_<key>` — recording
-the epoch, the surfaces fingerprint (global only), and the date. This creates a
+completed marker — `global-snoozed-<machine>` — recording
+the epoch and the date. This creates a
 third state distinct from both "unreconciled" and "reconciled":
 - **Unreconciled:** full banner + prompt (re-offers every session)
-- **Snoozed:** quiet banner "census deferred since <date>" (visible, not hidden)
+- **Snoozed:** quiet banner "reconciliation deferred since <date>" (visible, not hidden)
 - **Reconciled:** no banner, pass complete
 
-A snooze is **valid** while the stamped epoch equals the current `RECON_RULES_VERSION`
-and (for global) the surfaces fingerprint still matches. If the epoch advances or
-the automation set changes, the snooze **expires and re-arms honestly** — never
+A snooze is **valid** while the stamped epoch equals the current `RECON_RULES_VERSION`.
+If the epoch advances, the snooze **expires and re-arms honestly** — never
 silently. This satisfies the plugin's own rule: the deferred state is surfaced,
 never hidden.
 
-**The once-only marker paths** (for completed passes):
-- Global: `~/.claude/.no-hidden-changes/global-reconciled-<host>`
-- Per-project: `~/.claude/.no-hidden-changes/proj_<key>`
-- Surfaces baseline: `~/.claude/.no-hidden-changes/surfaces-<host>`
+**The once-only marker path** (for a completed pass):
+- Global: `~/.claude/.no-hidden-changes/global-reconciled-<machine>` — the only
+  marker. Since 2.0.0 there is no per-project pass and no surfaces baseline;
+  leftover `proj_*` / `surfaces-*` files from 1.x are inert and never read again.
 
-**Automation census (first global pass per machine, or when the installed set
-changes).** The same first-run pass also takes a one-time, read-only inventory of
+**Automation census (first global pass per machine).** The same first-run pass also takes a one-time, read-only inventory of
 installed automation — Claude Code hooks, `crontab`, launch agents,
 `~/.claude/scripts`, and session crons — and cross-checks it against your
 discoverable records. Surface it **two-directionally** in the same 🟢/🟡 batch: an
@@ -205,8 +203,10 @@ active automation with no record (offer to document it, naming mechanism, trigge
 and location) and a record whose automation no longer exists (offer to correct it),
 both DEFAULT-KEEP and per-item, never written silently. Exclude this plugin's own
 hook and OS/vendor-managed entries. This clears the *pre-existing* backlog once;
-keeping it current afterward is the document-at-install duty above (and the hook's
-change-triggered surfaces check) — **not** a recurring scan.
+keeping it current afterward is the document-at-install duty above — **not** a
+recurring scan, and (since 2.0.0) not a hook-side change detector either: the v1.x
+surfaces fingerprint hashed `~/.claude/scripts` — a workspace sessions write into
+near-daily — and re-armed the banner almost every day.
 
 ## Canonical anti-pattern
 
