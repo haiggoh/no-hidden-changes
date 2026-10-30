@@ -3,6 +3,18 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [2.1.0] — 2026-10-30
+
+### Added — recoverable-edit and file-mode rules now live in the skill
+
+- **Back up before editing uncommitted work**: `git status --porcelain <path>` first; any output
+  means take a timestamped copy or commit by path, then edit. Tracked is not recoverable.
+- **Preserve file permissions when rewriting**: redirect-and-move recreates the file at the default
+  umask (a `600` secrets file becomes `644`); edit in place, or capture and restore the mode.
+
+Both were previously carried only in a user's private global CLAUDE.md, so a machine without that
+copy had no such rule. Skill text only: no hook or triage-epoch change, so no banner re-arm.
+
 ## [2.0.0] — 2026-10-27
 
 ### Changed — the reconciliation re-arms only on a rule change (was: almost daily)

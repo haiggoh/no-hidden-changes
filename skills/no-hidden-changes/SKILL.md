@@ -92,6 +92,14 @@ The same discoverability test applies to version control, where the "native UI" 
 
 **EXCEPTION — a tag on a BROKEN release does not keep its place** (user rule, 2026-10-14). When the TAGGED COMMIT's own version surfaces disagree — manifest vs CHANGELOG vs docs, e.g. a conflict-marker manifest shipped by a rebase staging slip — the release is invisible to version-keyed installers: they fetch the HEAD manifest, read garbage, and fall back to the old version, so the update is hidden from the user in the worst possible way and stubbornly keeping the tag protects nothing. In that one case the more honest decision is to fix the commit and move the tag onto it, saying plainly that the tag moved. The bar is version inconsistency inside the tagged commit itself; an ordinary post-tag mistake still fixes forward.
 
+## Editing a file: make it recoverable first, and keep its mode
+
+Two silent ways an edit destroys something the user cannot see going.
+
+**Back up before editing uncommitted work.** Before editing a file, run `git status --porcelain <path>`. Any output — untracked, or tracked-but-dirty — means make it recoverable FIRST, by EITHER route: take a timestamped copy, **or commit it** (staged by path, on the right branch) so the commit is a reset point. Then edit. Which route is your call; the only bad outcome is editing uncommitted work destructively with no way back. **Tracked is not recoverable:** `git diff` shows working tree vs commit, so it renders your hunks and the user's uncommitted changes as one indivisible diff, and their work alone cannot be extracted from it. Never clobber uncommitted changes you did not make — assume they are work in progress. If the repo already has a backup convention (a `backups/` dir, purpose-tagged filenames), match it rather than inventing a parallel one. The copy costs nothing; skipping it costs the user's unsaved work.
+
+**Preserve file permissions when rewriting.** `jq/sed ... > tmp && mv tmp file` (and plain `> file` recreation) makes a NEW file at the default umask, often 644 — silently widening a `600` secrets file such as a config holding an API key. Prefer in-place edits (the Edit tool, `sed -i`) that keep the inode's mode. If you must redirect-and-move, capture the original mode first (`stat -f %Sp` on macOS; `ls -l` can show an `@` xattr marker) and restore it with an explicit `chmod`, then compare before and after for anything sensitive.
+
 ## Prefer native mechanisms
 
 Reach first for what the tool ships with: per-item toggles, documented settings, standard menus, feature flags. These keep the change visible where users expect to find it, and reversible by someone who has never heard of your workaround. A native path that costs a little more is usually worth it.
