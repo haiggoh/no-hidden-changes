@@ -3,6 +3,17 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [2.1.1] — 2026-10-31 — 👁️: the credit-moment mark on the rule's surfaces
+
+- The repo's GitHub About emoji (👁️) now leads what the user and model read at the plugin's credit
+  moments (plan 2026-10-28, §Wave 3 Task 9): the SessionStart nudge's first token, the SNOOZED
+  status banner, a ≤3-line Branding section in the SKILL.md, the plugin.json description, and the
+  README h1.
+- The FIRST-RUN greeting banner keeps 👋 **by user decision 2026-10-31**: the hand is the friendly
+  "hi, this plugin is here and would like a quick check" — 👁️ is the mark for the plugin acting on
+  the rule (finding violations). Different moments, different glyphs.
+- tests/test_hook.sh: exact-prefix pins for the nudge, both banners, each with its own glyph.
+
 ## [2.1.0] — 2026-10-30
 
 ### Added — recoverable-edit and file-mode rules now live in the skill

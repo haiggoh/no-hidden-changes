@@ -1,4 +1,4 @@
-# no-hidden-changes
+# 👁️ no-hidden-changes
 
 A tiny Claude behavior rule: **prefer visible, honest, reversible changes over
 hidden-state workarounds.** When a fix would move or hide state where a tool's own

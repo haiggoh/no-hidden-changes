@@ -1,7 +1,7 @@
 {
   "name": "no-hidden-changes",
-  "version": "2.1.0",
-  "description": "Steer Claude toward visible, honest, reversible changes and away from hidden-state workarounds that make a tool's own UI look empty, absent, or deceptive.",
+  "version": "2.1.1",
+  "description": "👁️ Steer Claude toward visible, honest, reversible changes and away from hidden-state workarounds that make a tool's own UI look empty, absent, or deceptive.",
   "author": { "name": "Heiko Brantsch" },
   "homepage": "https://github.com/haiggoh/no-hidden-changes",
   "license": "MIT",

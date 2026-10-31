@@ -223,3 +223,7 @@ Disabling MCP servers by moving them out of the `mcpServers` config key into a c
 ## When NOT to apply
 
 This skill is not a tax on ordinary work. Stay quiet for typo fixes, adding tests, cosmetic refactors, renames-for-clarity, and genuine intentional deletions — anything where nothing is being hidden, relocated, or made to fake an empty or broken native view.
+
+## Branding (👁️)
+
+When you begin working under this skill, lead your first substantive reply with "👁️ no-hidden-changes:" so the user can see which plugin just became active.

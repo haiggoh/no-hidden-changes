@@ -230,6 +230,20 @@ do
   esac
 done
 
+# Credit-moment mark (plan 2026-10-28, W3 Task 9, amended by the user 2026-10-31): the nudge and
+# the SNOOZED status banner carry the About-emoji 👁️; the FIRST-RUN banner keeps 👋 — it is a
+# greeting ("hi, this plugin is here and would like a quick check"), not a violation mark.
+case "$NUDGE" in
+  "👁️ no-hidden-changes: before any change that disables"*) check 0 "the nudge leads with '👁️ no-hidden-changes:'" ;;
+  *) check 1 "the nudge leads with '👁️ no-hidden-changes:'" ;;
+esac
+for frag in 'GLOBAL_BANNER="👋 no-hidden-changes active' 'GLOBAL_BANNER_SNOOZED="👁️ no-hidden-changes: reconciliation deferred'; do
+  case "$(cat "$HERE/../hooks/reconcile-check.sh")" in
+    *"$frag"*) check 0 "banner pinned: ${frag%% no*}" ;;
+    *) check 1 "banner pinned: $frag" ;;
+  esac
+done
+
 # A code span must survive as a LITERAL backtick. Passing prose through a double-quoted shell
 # string command-substitutes a span and silently deletes it while the command still exits 0,
 # so this asserts the stored text rather than trusting the writer.
