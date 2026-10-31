@@ -1,7 +1,7 @@
 {
   "name": "no-hidden-changes",
-  "version": "2.1.1",
-  "description": "👁️ Steer Claude toward visible, honest, reversible changes and away from hidden-state workarounds that make a tool's own UI look empty, absent, or deceptive.",
+  "version": "2.1.2",
+  "description": "👁️ Steers Claude toward visible, honest, reversible changes instead of hidden-state workarounds: edit the source rather than a derived copy, branch and stage by path, never rewrite published history, bump versions when you publish, and record any automation you install. A first-run pass checks the rule against your existing memories and instructions and surfaces conflicts for you to decide.",
   "author": { "name": "Heiko Brantsch" },
   "homepage": "https://github.com/haiggoh/no-hidden-changes",
   "license": "MIT",

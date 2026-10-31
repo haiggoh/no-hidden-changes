@@ -3,6 +3,12 @@
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 
+## [2.1.2] — 2026-10-31
+
+### Changed
+- The plugin description (plugin.json, and the marketplace listing it feeds) is rewritten to describe
+  the plugin's full current capabilities.
+
 ## [2.1.1] — 2026-10-31 — 👁️: the credit-moment mark on the rule's surfaces
 
 - The repo's GitHub About emoji (👁️) now leads what the user and model read at the plugin's credit

@@ -10,5 +10,6 @@
 
 
 
-  "refresh_plugin": "no-hidden-changes"
+  "refresh_plugin": "no-hidden-changes",
+  "require_default_branch_checkout": true
 }
