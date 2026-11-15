@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.1.3] — 2026-11-15
+
+### Added — Phase 3 Wave A: committed portable package (COORDINATION C1/C2)
+
+- New `scripts/build-portable.py` (stdlib, `--help`/`--check`/`--zip`) generates the
+  committed `portable/` package: same-name manifest, the skill, and the hook + script
+  closures — every `${CLAUDE_PLUGIN_ROOT}` reference already package-relative, so no
+  transforms. Emits `portable/PORTABLE-BUILD.json` (haiggoh-portable-build/1) and a
+  deterministic `dist/no-hidden-changes-portable.zip` (manifest at zip root, gitignored).
+- `tests/test_portable.py` pins freshness, same-name manifest, no `bin/`, closure
+  completeness (host skill + hook-script refs must exist in portable/), the C2 schema,
+  and the zip shape. Code files are scanned for literal `../` escapes; guidance markdown
+  may QUOTE `../` paths (the skill documents that `../shared` fails) and is checked via
+  its `${...}` references instead.
+- The strict-YAML glob covers `portable/skills/*/SKILL.md` too.
+- Wave-A re-derivation: the plan's "snooze date" candidate is already resolved (markers
+  are epoch-gated since 2.0.0; the stamped date is display-only), and the tag-move
+  exception is explicitly scoped — both recorded, no code change needed.
+
 All notable changes to the `no-hidden-changes` plugin are documented here. Entries before 1.7.0 are
 reconstructed from the git history rather than written at the time.
 

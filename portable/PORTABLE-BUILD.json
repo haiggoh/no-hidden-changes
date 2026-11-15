@@ -1,0 +1,77 @@
+{
+  "builder": "scripts/build-portable.py",
+  "builder_version": "1.0.0",
+  "components": [
+    {
+      "adaptation_class": "mechanical",
+      "evidence_level": "source-inspected",
+      "kind": "manifest",
+      "notes": "same name+version as the host manifest; an installed marketplace plugin wins over a synced copy in Code, so no double-run",
+      "path": ".claude-plugin/plugin.json",
+      "surfaces": {
+        "chat": true,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "native-unchanged",
+      "evidence_level": "source-inspected",
+      "kind": "skill",
+      "notes": "pure guidance; strict-YAML frontmatter pinned by tests, portable/ tree included",
+      "path": "skills/no-hidden-changes/SKILL.md",
+      "surfaces": {
+        "chat": true,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "mechanical",
+      "evidence_level": "source-inspected",
+      "kind": "hooks",
+      "notes": "Chat ignores plugin hooks, Cowork loads them, Code runs them",
+      "path": "hooks/hooks.json",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "native-unchanged",
+      "evidence_level": "source-inspected",
+      "kind": "hook-script",
+      "notes": "bash 3.2, DETECT+OFFER only (never writes markers); ${CLAUDE_PLUGIN_ROOT}-relative",
+      "path": "hooks/reconcile-check.sh",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    },
+    {
+      "adaptation_class": "native-unchanged",
+      "evidence_level": "source-inspected",
+      "kind": "script",
+      "notes": "host-only by nature: needs a real Terminal.app window + osascript; the skill labels it the visible host path \u2014 a Cowork sandbox cannot open windows",
+      "path": "scripts/sudo-in-terminal.sh",
+      "surfaces": {
+        "chat": false,
+        "code": true,
+        "cowork": true
+      }
+    }
+  ],
+  "files": {
+    ".claude-plugin/plugin.json": "8f363e78692e8b940ba1dc34dbc9c53532317b0c6c1e7df4710b16424c1731a5",
+    "hooks/hooks.json": "6380fb8d1b447982b7211f74a8a931252d28281542f365a0ca7ebed30aae6e1a",
+    "hooks/reconcile-check.sh": "27f0ba588020fdc94fd57493a8a7c6f6ece60ebe9263c0b85d5c2f1c3d15bf7c",
+    "scripts/sudo-in-terminal.sh": "1bef986107db13752883eee4e357fa3e103f4502083d2db0ea1cb656abe9ba53",
+    "skills/no-hidden-changes/SKILL.md": "8b6a56ca32ae0527a92876f36c24a987fd10b79ec18f19787b6385034e8bdaa3"
+  },
+  "schema": "haiggoh-portable-build/1",
+  "source_commit": "dac3125219e80948b732efd5854d292b30a2072e",
+  "source_repo": "haiggoh/no-hidden-changes",
+  "transform_version": "1"
+}
