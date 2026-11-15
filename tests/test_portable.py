@@ -80,7 +80,9 @@ def test_portable_closure_complete_and_no_escapes():
             # (the worktree section names ../<repo>-<topic>) — checked via refs instead.
             assert "../" not in text, f"literal ../ escape in {p.relative_to(PORTABLE)}"
         for m in REF_RE.finditer(text):
-            rel = m.group(1)
+            rel = m.group(2)  # group(1) is the variable name; group(2) is the path
+            if rel is None:
+                continue  # bare ${VAR} — the root itself
             parts = PurePosixPath(rel).parts
             assert ".." not in parts and not PurePosixPath(rel).is_absolute(), \
                 f"{p.relative_to(PORTABLE)} references escaping path {rel}"
