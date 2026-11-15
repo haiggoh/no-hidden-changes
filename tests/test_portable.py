@@ -68,21 +68,28 @@ def test_portable_closure_complete_and_no_escapes():
     assert PORTABLE.is_dir(), "portable/ must exist (run scripts/build-portable.py)"
     for p in sorted(PORTABLE.rglob("*")):
         assert not p.is_symlink(), f"symlink in portable package: {p}"
+    # braceless $VAR/... references escape both the ${...} scan and a naive grep — catch them
+    braceless = re.compile(r"(?<!\$\{)(?<!\w)\$(?:CLAUDE_PLUGIN_ROOT|CLAUDE_SKILL_DIR)/([^\s\"'\\)]+)")
     for p in sorted(PORTABLE.rglob("*")):
-        if p.is_file() and p.suffix in (".json", ".sh", ".py"):
-            # code files: any literal ../ is an escape; guidance .md may QUOTE ../ paths
-            # (the skill documents that ../shared fails) — those are checked via REF_RE only
-            text = p.read_text(encoding="utf-8", errors="replace")
+        if not p.is_file() or p.suffix not in (".json", ".sh", ".py", ".md") \
+                or p.name == "PORTABLE-BUILD.json":  # its notes describe the ${...} contract
+            continue
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if p.suffix != ".md":
+            # code files: any literal ../ is an escape. Guidance .md may QUOTE ../ paths
+            # (the worktree section names ../<repo>-<topic>) — checked via refs instead.
             assert "../" not in text, f"literal ../ escape in {p.relative_to(PORTABLE)}"
-            for m in REF_RE.finditer(text):
-                rel = m.group(2)
-                if rel is None:
-                    continue  # bare ${CLAUDE_PLUGIN_ROOT} — the root itself, always fine
-                parts = PurePosixPath(rel).parts
-                assert ".." not in parts and not PurePosixPath(rel).is_absolute(), \
-                    f"{p.relative_to(PORTABLE)} references escaping path {rel}"
-                assert (PORTABLE / rel).exists(), \
-                    f"{p.relative_to(PORTABLE)} references {rel}, missing in portable/"
+        for m in REF_RE.finditer(text):
+            rel = m.group(1)
+            parts = PurePosixPath(rel).parts
+            assert ".." not in parts and not PurePosixPath(rel).is_absolute(), \
+                f"{p.relative_to(PORTABLE)} references escaping path {rel}"
+            assert (PORTABLE / rel).exists(), \
+                f"{p.relative_to(PORTABLE)} references {rel}, missing in portable/"
+        for m in braceless.finditer(text):
+            rel = m.group(1)
+            assert (PORTABLE / rel).exists(), \
+                f"{p.relative_to(PORTABLE)} braceless ref {rel}, missing in portable/"
 
 
 def test_portable_build_json_matches_c2_schema():

@@ -54,12 +54,12 @@
       "adaptation_class": "native-unchanged",
       "evidence_level": "source-inspected",
       "kind": "script",
-      "notes": "host-only by nature: needs a real Terminal.app window + osascript; the skill labels it the visible host path \u2014 a Cowork sandbox cannot open windows",
+      "notes": "host-only: needs a real Terminal.app window + osascript \u2014 a Cowork sandbox cannot open windows, so the skill routes Cowork/Chat to the host Code tab",
       "path": "scripts/sudo-in-terminal.sh",
       "surfaces": {
         "chat": false,
         "code": true,
-        "cowork": true
+        "cowork": false
       }
     }
   ],
@@ -71,7 +71,7 @@
     "skills/no-hidden-changes/SKILL.md": "8b6a56ca32ae0527a92876f36c24a987fd10b79ec18f19787b6385034e8bdaa3"
   },
   "schema": "haiggoh-portable-build/1",
-  "source_commit": "dac3125219e80948b732efd5854d292b30a2072e",
+  "source_commit": "e8c61f7e13532cc17962792fd84428be2f4e5fae",
   "source_repo": "haiggoh/no-hidden-changes",
   "transform_version": "1"
 }

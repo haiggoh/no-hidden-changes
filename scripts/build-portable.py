@@ -83,9 +83,9 @@ COMPONENTS = [
      "notes": "bash 3.2, DETECT+OFFER only (never writes markers); ${CLAUDE_PLUGIN_ROOT}-relative"},
     {"path": "scripts/sudo-in-terminal.sh", "kind": "script",
      "adaptation_class": "native-unchanged", "evidence_level": "source-inspected",
-     "surfaces": {"chat": False, "cowork": True, "code": True},
-     "notes": "host-only by nature: needs a real Terminal.app window + osascript; the skill "
-              "labels it the visible host path — a Cowork sandbox cannot open windows"},
+     "surfaces": {"chat": False, "cowork": False, "code": True},
+     "notes": "host-only: needs a real Terminal.app window + osascript — a Cowork sandbox "
+              "cannot open windows, so the skill routes Cowork/Chat to the host Code tab"},
 ]
 
 
@@ -134,8 +134,10 @@ def build_tree(root, dest):
     return manifest
 
 
-def write_build_json(dest, root, commit_override):
+def write_build_json(dest, root, commit_override, repo_override=None):
     source_repo, commit = source_identity(root, commit_override)
+    if repo_override:
+        source_repo = repo_override
     files = {}
     for dirpath, _dn, filenames in os.walk(dest):
         for fn in sorted(filenames):
@@ -186,7 +188,11 @@ def swap_in(fresh, portable):
     leaves a half-written committed dir)."""
     if os.path.isdir(portable):
         shutil.rmtree(portable)
-    os.rename(fresh, portable)
+    try:
+        os.rename(fresh, portable)
+    except OSError:  # EXDEV: TMPDIR on another filesystem — copy+remove instead
+        shutil.copytree(fresh, portable)
+        shutil.rmtree(fresh)
 
 
 def write_zip(build_dir, out_dir, name):
@@ -224,16 +230,19 @@ def main(argv=None):
     # --check is commit-stable: stamp the fresh build with the COMMITTED source_commit,
     # so the gate is green at the shipping commit (a SHA cannot contain itself).
     check_commit = args.commit
+    check_repo = None
     if args.check and check_commit is None and os.path.isfile(
             os.path.join(portable, "PORTABLE-BUILD.json")):
         with open(os.path.join(portable, "PORTABLE-BUILD.json"), encoding="utf-8") as f:
-            check_commit = json.load(f).get("source_commit")
+            committed = json.load(f)
+        check_commit = committed.get("source_commit")
+        check_repo = committed.get("source_repo")
 
     with tempfile.TemporaryDirectory() as tmp:
         fresh = os.path.join(tmp, "portable")
         os.makedirs(fresh)
         build_tree(root, fresh)
-        write_build_json(fresh, root, check_commit or args.commit)
+        write_build_json(fresh, root, check_commit or args.commit, check_repo)
 
         if args.check:
             if not os.path.isdir(portable):
