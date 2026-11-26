@@ -1,6 +1,6 @@
 {
   "name": "no-hidden-changes",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "\ud83d\udc41\ufe0f Steers Claude toward visible, honest, reversible changes instead of hidden-state workarounds: edit the source rather than a derived copy, branch and stage by path, never rewrite published history, bump versions when you publish, and record any automation you install. A first-run pass checks the rule against your existing memories and instructions and surfaces conflicts for you to decide.",
   "author": {
     "name": "Heiko Brantsch"

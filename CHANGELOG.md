@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.4] — 2026-11-26
+
+### Changed — merge, don't rebase, a published branch (plan 2026-11-26-merge-not-rebase-published-branches)
+
+- The "Never force-push or move a published tag unasked" paragraph now states the merge
+  alternative explicitly: when a pushed branch needs another branch's work, merge it in
+  (a merge only appends); rebase only a branch that was never pushed, or one whose
+  rewritten copy is never pushed back.
+
 ## [2.1.3] — 2026-11-15
 
 ### Added — Phase 3 Wave A: committed portable package (COORDINATION C1/C2)

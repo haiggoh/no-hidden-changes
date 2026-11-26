@@ -64,14 +64,14 @@
     }
   ],
   "files": {
-    ".claude-plugin/plugin.json": "8f363e78692e8b940ba1dc34dbc9c53532317b0c6c1e7df4710b16424c1731a5",
+    ".claude-plugin/plugin.json": "1744ef89912132e36d5977fcbca986c8666ab59a4043129b47f5f760e9d6c687",
     "hooks/hooks.json": "6380fb8d1b447982b7211f74a8a931252d28281542f365a0ca7ebed30aae6e1a",
     "hooks/reconcile-check.sh": "27f0ba588020fdc94fd57493a8a7c6f6ece60ebe9263c0b85d5c2f1c3d15bf7c",
     "scripts/sudo-in-terminal.sh": "1bef986107db13752883eee4e357fa3e103f4502083d2db0ea1cb656abe9ba53",
-    "skills/no-hidden-changes/SKILL.md": "8b6a56ca32ae0527a92876f36c24a987fd10b79ec18f19787b6385034e8bdaa3"
+    "skills/no-hidden-changes/SKILL.md": "06b84088f74612548f1342c78ac5670e8dd763a1aa949ad8eede7ccbd7d9fd56"
   },
   "schema": "haiggoh-portable-build/1",
-  "source_commit": "e8c61f7e13532cc17962792fd84428be2f4e5fae",
+  "source_commit": "c0fe7805098bd9812d84a27897f83983c361d696",
   "source_repo": "haiggoh/no-hidden-changes",
   "transform_version": "1"
 }
